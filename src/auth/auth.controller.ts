@@ -1,9 +1,18 @@
-import { Body, Controller, Post, UseGuards, Req, Res } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Post,
+  UseGuards,
+  Req,
+  Res,
+  Get,
+} from '@nestjs/common';
 import { AuthService } from './auth.service';
 import { AuthGuard } from '@nestjs/passport';
 import { Request, Response } from 'express';
 import { User } from 'generated/prisma';
 import { UnauthorizedException } from '@nestjs/common';
+
 @Controller('auth')
 export class AuthController {
   constructor(private readonly authService: AuthService) {}
@@ -13,20 +22,33 @@ export class AuthController {
     return this.authService.createUser(body.email, body.password);
   }
 
+  @Get('check-refresh')
+  checkRefreshToken(@Req() req: Request) {
+    const refreshToken = req.cookies['refresh_token'];
+    console.log('refresh token check initiated');
+    console.log(req.cookies);
+    if (refreshToken) {
+      console.log('has  refresh');
+      return { hasRefreshToken: true };
+    }
+    console.log('no refresh');
+    return { hasRefreshToken: false };
+  }
+
   @Post('refresh')
   async refresh(
     @Req() req: Request,
     @Res({ passthrough: true }) res: Response,
   ) {
-    // const refreshToken = req.cookies?.['refresh_token']
-    const cookieHeader = req.headers.cookie;
-    const refreshToken = cookieHeader
-      ? cookieHeader
-          .split(';')
-          .map((cookie) => cookie.trim())
-          .find((cookie) => cookie.startsWith('refresh_token='))
-          ?.split('=')[1]
-      : undefined;
+    const refreshToken = req.cookies?.['refresh_token'];
+    // const cookieHeader = req.headers.cookie;
+    // const refreshToken = cookieHeader
+    //   ? cookieHeader
+    //       .split(';')
+    //       .map((cookie) => cookie.trim())
+    //       .find((cookie) => cookie.startsWith('refresh_token='))
+    //       ?.split('=')[1]
+    //   : undefined;
 
     if (!refreshToken) throw new UnauthorizedException();
 
@@ -36,6 +58,7 @@ export class AuthController {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
       sameSite: 'strict',
+
       path: '/auth/refresh',
       maxAge: 7 * 24 * 60 * 60 * 1000,
     });
@@ -55,6 +78,7 @@ export class AuthController {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
       sameSite: 'strict',
+
       path: '/auth/refresh',
       maxAge: 7 * 24 * 60 * 60 * 1000,
     });
