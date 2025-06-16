@@ -15,11 +15,39 @@ datasource db {
 }
 
 model User {
+  id            String    @id @default(uuid())
+  email         String    @unique
+  password      String? // For credentials auth
+  emailVerified Boolean   @default(false)
+  sessions      Session[]
+  accounts      Account[]
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+}
+
+model Session {
   id           String   @id @default(uuid())
-  email        String   @unique
-  name         String?
-  password     String?
-  refreshToken String?
+  userId       String
+  user         User     @relation(fields: [userId], references: [id])
+  refreshToken String   @unique
+  userAgent    String?
+  ipAddress    String?
   createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  expiresAt    DateTime
+  revoked      Boolean  @default(false)
+}
+
+model Account {
+  id                String @id @default(uuid())
+  userId            String
+  provider          String
+  providerAccountId String
+  user              User   @relation(fields: [userId], references: [id])
+
+  // Optional for accessing provider APIs:
+  accessToken  String?
+  refreshToken String?
+  expiresAt    DateTime?
+
+  @@unique([provider, providerAccountId])
 }
