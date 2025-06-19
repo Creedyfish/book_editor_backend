@@ -3,7 +3,10 @@ import { AuthService } from './auth.service';
 import { AuthController } from './auth.controller';
 import { DatabaseModule } from 'src/database/database.module';
 import { LocalStrategy } from './local.stategy';
+import { JwtStrategy } from './jwt.strategy';
 import { JwtModule } from '@nestjs/jwt';
+import { GoogleStrategy } from './google.strategy';
+import { MailService } from 'src/mail/mail.service';
 @Module({
   imports: [
     DatabaseModule,
@@ -13,6 +16,12 @@ import { JwtModule } from '@nestjs/jwt';
     }),
   ],
   controllers: [AuthController],
-  providers: [AuthService, LocalStrategy],
+  providers: [
+    AuthService,
+    LocalStrategy,
+    JwtStrategy,
+    GoogleStrategy,
+    MailService,
+  ],
 })
 export class AuthModule {}
