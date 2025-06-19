@@ -5,6 +5,7 @@ import * as bcrypt from 'bcrypt';
 import { JwtService } from '@nestjs/jwt';
 import { User } from 'generated/prisma';
 import { randomUUID, createHash } from 'crypto';
+import { MailService } from 'src/mail/mail.service';
 @Injectable()
 export class AuthService {
   constructor(
@@ -12,7 +13,30 @@ export class AuthService {
     private jwtService: JwtService,
   ) {}
 
+  private generateCode(length = 6): string {
+    const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+    let code = '';
+    for (let i = 0; i < length; i++) {
+      code += chars.charAt(Math.floor(Math.random() * chars.length));
+    }
+    return code;
+  }
+
   async createUser(email: string, password: string) {
+    const existingUser = await this.databaseService.user.findUnique({
+      where: { email },
+      include: { accounts: true },
+    });
+
+    if (existingUser) {
+      // Optional: Provide a smart error
+      if (existingUser.accounts.some((acc) => acc.provider === 'google')) {
+        throw new ForbiddenException('This email is already registered.');
+      }
+
+      throw new ForbiddenException('Email is already in use.');
+    }
+
     const hashed = await bcrypt.hash(password, 10);
     return this.databaseService.user.create({
       data: {
@@ -22,13 +46,71 @@ export class AuthService {
     });
   }
 
+  async createEmailVerificationCode(userId: string): Promise<string> {
+    const code = this.generateCode();
+    const hashedCode = await bcrypt.hash(code, 10);
+    await this.databaseService.emailVerificationCode.create({
+      data: {
+        userId,
+        code: hashedCode,
+        expiresAt: new Date(Date.now() + 15 * 60 * 1000),
+      },
+    });
+    console.log(code);
+    return code;
+  }
+
+  async UserCodeVerification(code: string, email: string) {
+    const user = await this.databaseService.user.findUnique({
+      where: { email },
+    });
+
+    if (!user) {
+      throw new ForbiddenException();
+    }
+
+    const record = await this.databaseService.emailVerificationCode.findFirst({
+      where: {
+        userId: user.id,
+        expiresAt: {
+          gt: new Date(),
+        },
+      },
+      orderBy: {
+        createdAt: 'desc',
+      },
+    });
+
+    if (!record) {
+      throw new ForbiddenException('Verification code not found or expired.');
+    }
+
+    const isMatch = await bcrypt.compare(code, record.code);
+    if (!isMatch) {
+      throw new ForbiddenException('Invalid verification code.');
+    }
+
+    await this.databaseService.user.update({
+      where: { id: user.id },
+      data: { emailVerified: true },
+    });
+
+    await this.databaseService.emailVerificationCode.delete({
+      where: { id: record.id },
+    });
+    console.log('user Verified');
+  }
+
   async validateUser(email: string, password: string) {
     const user = await this.databaseService.user.findUnique({
       where: { email },
     });
-    if (!user) return null;
 
-    if (!user.password) return null;
+    if (!user || !user.password) return null;
+
+    if (!user.emailVerified) {
+      throw new UnauthorizedException('Please verify your email first');
+    }
 
     const isMatch = await bcrypt.compare(password, user.password);
     if (!isMatch) return null;

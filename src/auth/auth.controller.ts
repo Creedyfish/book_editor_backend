@@ -12,28 +12,63 @@ import { AuthGuard } from '@nestjs/passport';
 import { Request, Response } from 'express';
 import { User } from 'generated/prisma';
 import { UnauthorizedException } from '@nestjs/common';
+import { MailService } from 'src/mail/mail.service';
 
 @Controller('auth')
 export class AuthController {
-  constructor(private readonly authService: AuthService) {}
+  constructor(
+    private readonly authService: AuthService,
+    private emailService: MailService,
+  ) {}
 
   @Post('register')
-  register(@Body() body: { email: string; password: string }) {
-    return this.authService.createUser(body.email, body.password);
+  async register(@Body() body: { email: string; password: string }) {
+    const newUser = await this.authService.createUser(
+      body.email,
+      body.password,
+    );
+
+    const code = await this.authService.createEmailVerificationCode(newUser.id);
+    return this.emailService.sendVerificationCode(body.email, code);
+  }
+
+  @Post('email-verification')
+  async verify(@Body() body: { email: string; code: string }) {
+    const verifiedUser = await this.authService.UserCodeVerification(
+      body.code,
+      body.email,
+    );
+
+    return verifiedUser;
   }
 
   @Post('logout')
   async logout(@Req() req: Request, @Res({ passthrough: true }) res: Response) {
-    const refreshToken = req.cookies['refresh_token'];
+    const refreshToken = await req.cookies['refresh_token'];
+    console.log({ 'current refreshToken': refreshToken });
+
     if (refreshToken) {
-      this.authService.logout(refreshToken);
-      return;
-    } else throw new UnauthorizedException();
+      // Add await here
+      await this.authService.logout(refreshToken);
+
+      // Clear the refresh token cookie
+      res.clearCookie('refresh_token', {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === 'production',
+        sameSite: 'strict',
+        path: '/', // Same path as when setting the cookie
+      });
+
+      // Return success response
+      return { message: 'Logged out successfully' };
+    } else {
+      throw new UnauthorizedException('No refresh token found');
+    }
   }
 
   @Get('check-refresh')
-  checkRefreshToken(@Req() req: Request) {
-    const refreshToken = req.cookies['refresh_token'];
+  async checkRefreshToken(@Req() req: Request) {
+    const refreshToken = await req.cookies['refresh_token'];
     // const cookieHeader = req.headers.cookie;
     // const refreshToken = cookieHeader
     //   ? cookieHeader
@@ -57,7 +92,7 @@ export class AuthController {
     @Req() req: Request,
     @Res({ passthrough: true }) res: Response,
   ) {
-    const refreshToken = req.cookies?.['refresh_token'];
+    const refreshToken = await req.cookies?.['refresh_token'];
     // const cookieHeader = req.headers.cookie;
     // const refreshToken = cookieHeader
     //   ? cookieHeader
@@ -76,7 +111,7 @@ export class AuthController {
       secure: process.env.NODE_ENV === 'production',
       sameSite: 'strict',
 
-      path: '/api/auth/refresh',
+      path: '/',
       maxAge: 7 * 24 * 60 * 60 * 1000,
     });
 
@@ -96,7 +131,7 @@ export class AuthController {
       secure: process.env.NODE_ENV === 'production',
       sameSite: 'strict',
 
-      path: '/api/auth/refresh',
+      path: '/',
       maxAge: 7 * 24 * 60 * 60 * 1000,
     });
 
@@ -125,7 +160,7 @@ export class AuthController {
       secure: process.env.NODE_ENV === 'production',
       sameSite: 'strict',
 
-      path: '/api/auth/refresh',
+      path: '/',
       maxAge: 7 * 24 * 60 * 60 * 1000,
     });
 
