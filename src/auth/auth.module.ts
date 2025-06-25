@@ -4,12 +4,14 @@ import { AuthController } from './auth.controller';
 import { DatabaseModule } from 'src/database/database.module';
 import { LocalStrategy } from './local.stategy';
 import { JwtStrategy } from './jwt.strategy';
-import { JwtModule } from '@nestjs/jwt';
+import { JwtModule, JwtService } from '@nestjs/jwt';
 import { GoogleStrategy } from './google.strategy';
 import { MailService } from 'src/mail/mail.service';
+import { MailModule } from 'src/mail/mail.module';
 @Module({
   imports: [
     DatabaseModule,
+    MailModule,
     JwtModule.register({
       secret: process.env.JWT_SECRET,
       signOptions: { expiresIn: '15m' },
