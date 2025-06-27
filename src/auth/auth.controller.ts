@@ -6,83 +6,144 @@ import {
   Req,
   Res,
   Get,
-  UseFilters,
-} from '@nestjs/common';
-import { AuthService } from './auth.service';
-import { AuthGuard } from '@nestjs/passport';
-import { Request, Response } from 'express';
-import { User } from 'generated/prisma';
-import {
   UnauthorizedException,
   ForbiddenException,
-  ConflictException,
+  UseFilters,
 } from '@nestjs/common';
+import { AuthGuard } from '@nestjs/passport';
+import { Request, Response } from 'express';
+
+import { AuthService } from './auth.service';
 import { MailService } from 'src/mail/mail.service';
 import { OAuthExceptionFilter } from './exceptions/oauth-exception.filter';
+import { RegisterDto } from './dto/auth/register.dto';
+import { User } from 'generated/prisma';
+import { LoginDto } from './dto/auth/login.dto';
+import { EmailPurposeDto } from './dto/email/email-purpose.dto';
+import { VerifyEmailCodeDto } from './dto/email/verify-email-code.dto';
+import { ResendVerificationDto } from './dto/email/resend-verification.dto';
+import { RequestPasswordResetDto } from './dto/password/request-password-reset.dto';
+import { ResetPasswordDto } from './dto/password/reset-password.dto';
+
 @Controller('auth')
 export class AuthController {
   constructor(
     private readonly authService: AuthService,
-    private emailService: MailService,
+    private readonly emailService: MailService,
   ) {}
+
+  // ─────────────────────────────────────────────
+  // ▶ EMAIL/PASSWORD AUTH FLOW
+  // ─────────────────────────────────────────────
 
   @Post('register')
   async register(
-    @Body() body: { email: string; password: string },
+    @Body() body: RegisterDto,
     @Res({ passthrough: true }) res: Response,
   ) {
+    console.log('registering');
+    const verifyCloudfare = await this.authService.verifyTurnstileToken(
+      body.token,
+    );
+    console.log('turnstile verified');
+    if (!verifyCloudfare) throw new UnauthorizedException('Please try again');
+
     const newUser = await this.authService.createUser(
       body.email,
       body.password,
     );
-
     const code = await this.authService.createEmailVerificationCode(newUser.id);
-    await this.emailService.sendVerificationCode(newUser.email, code);
+
+    await this.emailService.sendCodeEmail(
+      newUser.email,
+      code,
+      'email-verification',
+    );
+
     const emailToken = await this.emailService.generateEmailToken(
       newUser.email,
+      'email-verification',
     );
 
     res.cookie('email_verification_token', emailToken, {
       secure: process.env.NODE_ENV === 'production',
       sameSite: 'strict',
-      maxAge: 10 * 60 * 1000, // 10 minutes
+      maxAge: 10 * 60 * 1000,
       path: '/',
     });
+
     return { message: 'email token sent' };
   }
 
-  @Get('email-token')
-  async getEmail(
-    @Req() req: Request,
+  @Post('login')
+  @UseGuards(AuthGuard('local'))
+  async login(
+    @Req()
+    req: Request & { user: Pick<User, 'id' | 'email' | 'emailVerified'> },
+    @Body() body: LoginDto,
     @Res({ passthrough: true }) res: Response,
   ) {
-    const token = req.cookies['email_verification_token'];
-    const payload =
-      await this.emailService.verifyEmailTokenAndGetPayload(token);
-    if (!payload) {
-      throw new UnauthorizedException();
-    }
+    if (!req.user.emailVerified)
+      throw new ForbiddenException('Please verify your email first');
+
+    const verifyCloudfare = await this.authService.verifyTurnstileToken(
+      body.token,
+    );
+    if (!verifyCloudfare) throw new UnauthorizedException('Please try again');
+
+    const tokens = await this.authService.login(req.user);
+
+    res.cookie('refresh_token', tokens.refreshToken, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'strict',
+      path: '/',
+      maxAge: 7 * 24 * 60 * 60 * 1000,
+    });
+
+    return { accessToken: tokens.accessToken };
+  }
+
+  // ─────────────────────────────────────────────
+  // ▶ EMAIL VERIFICATION FLOW
+  // ─────────────────────────────────────────────
+
+  @Post('email-token')
+  async getEmail(@Req() req: Request, @Body() body: EmailPurposeDto) {
+    const cookieName =
+      body.purpose === 'password-reset'
+        ? 'reset_password_token'
+        : 'email_verification_token';
+
+    const token = req.cookies[cookieName];
+
+    const payload = await this.emailService.verifyTokenAndGetPayload(
+      token,
+      body.purpose,
+    );
+    if (!payload) throw new UnauthorizedException();
 
     return { email: payload.email };
   }
 
   @Post('email-verification')
-  async verify(
+  async verifyEmailCode(
     @Req() req: Request,
-    @Body() body: { code: string },
+    @Body() body: VerifyEmailCodeDto,
     @Res({ passthrough: true }) res: Response,
   ) {
     const token = req.cookies['email_verification_token'];
-    const payload =
-      await this.emailService.verifyEmailTokenAndGetPayload(token);
-    if (!payload) {
-      throw new UnauthorizedException();
-    }
+    const payload = await this.emailService.verifyTokenAndGetPayload(
+      token,
+      'email-verification',
+    );
+
+    if (!payload) throw new UnauthorizedException();
+
     const verifiedUser = await this.authService.verifyUserEmailCode(
       body.code,
       payload.email,
     );
-
     const tokens = await this.authService.login({
       id: verifiedUser.id,
       email: verifiedUser.email,
@@ -92,7 +153,6 @@ export class AuthController {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
       sameSite: 'strict',
-
       path: '/',
       maxAge: 7 * 24 * 60 * 60 * 1000,
     });
@@ -105,51 +165,32 @@ export class AuthController {
   @Post('resend-verification')
   async resendEmailVerification(
     @Req() req: Request,
-    @Body() body: { email: string },
+    @Body() body: ResendVerificationDto,
     @Res({ passthrough: true }) res: Response,
   ) {
     const token = req.cookies['email_verification_token'];
 
-    if (token) {
-      // Verify token is still valid
-      const isValidToken =
-        await this.emailService.verifyEmailTokenAndGetPayload(
+    const isValidToken = token
+      ? await this.emailService.verifyTokenAndGetPayload(
           token,
+          'email-verification',
           body.email,
-        );
+        )
+      : null;
 
-      if (isValidToken) {
-        await this.authService.resendEmailVerificationCode(body.email);
-        const emailToken = await this.emailService.generateEmailToken(
-          body.email,
-        );
-
-        res.cookie('email_verification_token', emailToken, {
-          secure: process.env.NODE_ENV === 'production',
-          sameSite: 'strict',
-          maxAge: 10 * 60 * 1000,
-          path: '/',
-        });
-        return { message: 'email token sent' };
-      }
+    if (!isValidToken) {
+      throw new UnauthorizedException({
+        message: 'Verification time expired',
+        requiresLogin: true,
+      });
     }
 
-    return {
-      message:
-        'Token expired or invalid. Please use /resend-verification-with-login',
-      requiresLogin: true,
-    };
-  }
+    await this.authService.resendEmailVerificationCode(body.email);
 
-  @Post('resend-verification-with-login')
-  @UseGuards(AuthGuard('local'))
-  async resendEmailVerificationWithLogin(
-    @Req() req: Request & { user: Pick<User, 'id' | 'email'> },
-    @Res({ passthrough: true }) res: Response,
-  ) {
-    const user = req.user; // Available after local auth
-    await this.authService.resendEmailVerificationCode(user.email);
-    const emailToken = await this.emailService.generateEmailToken(user.email);
+    const emailToken = await this.emailService.generateEmailToken(
+      body.email,
+      'email-verification',
+    );
 
     res.cookie('email_verification_token', emailToken, {
       secure: process.env.NODE_ENV === 'production',
@@ -161,63 +202,89 @@ export class AuthController {
     return { message: 'email token sent' };
   }
 
-  @Post('logout')
-  async logout(@Req() req: Request, @Res({ passthrough: true }) res: Response) {
-    const refreshToken = await req.cookies['refresh_token'];
+  @Post('resend-verification-with-login')
+  @UseGuards(AuthGuard('local'))
+  async resendEmailVerificationWithLogin(
+    @Req() req: Request & { user: Pick<User, 'id' | 'email'> },
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    await this.authService.resendEmailVerificationCode(req.user.email);
 
-    if (refreshToken) {
-      // Add await here
-      await this.authService.logout(refreshToken);
+    const emailToken = await this.emailService.generateEmailToken(
+      req.user.email,
+      'email-verification',
+    );
 
-      // Clear the refresh token cookie
-      res.clearCookie('refresh_token', {
-        httpOnly: true,
-        secure: process.env.NODE_ENV === 'production',
-        sameSite: 'strict',
-        path: '/', // Same path as when setting the cookie
-      });
+    res.cookie('email_verification_token', emailToken, {
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'strict',
+      maxAge: 10 * 60 * 1000,
+      path: '/',
+    });
 
-      // Return success response
-      return { message: 'Logged out successfully' };
-    } else {
-      throw new UnauthorizedException('No refresh token found');
-    }
+    return { message: 'email token sent' };
   }
 
-  @Get('check-refresh')
-  async checkRefreshToken(@Req() req: Request) {
-    const refreshToken = await req.cookies['refresh_token'];
-    // const cookieHeader = req.headers.cookie;
-    // const refreshToken = cookieHeader
-    //   ? cookieHeader
-    //       .split(';')
-    //       .map((cookie) => cookie.trim())
-    //       .find((cookie) => cookie.startsWith('refresh_token='))
-    //       ?.split('=')[1]
-    //   : undefined;
+  // ─────────────────────────────────────────────
+  // ▶ PASSWORD RESET FLOW
+  // ─────────────────────────────────────────────
 
-    if (refreshToken) {
-      return { hasRefreshToken: true };
-    }
+  @Post('request-password-reset')
+  async requestPasswordReset(
+    @Body() body: RequestPasswordResetDto,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    const verifyCloudfare = await this.authService.verifyTurnstileToken(
+      body.token,
+    );
+    if (!verifyCloudfare) throw new UnauthorizedException('Please try again');
 
-    return { hasRefreshToken: false };
+    const emailToken = await this.emailService.generateEmailToken(
+      body.email,
+      'password-reset',
+    );
+
+    res.cookie('reset_password_token', emailToken, {
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'strict',
+      maxAge: 10 * 60 * 1000,
+      path: '/',
+    });
+
+    return this.authService.requestPasswordReset(body.email);
   }
+
+  @Post('reset-password')
+  async resetPassword(
+    @Req() req: Request,
+    @Body() body: ResetPasswordDto,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    const token = req.cookies['reset_password_token'];
+    const payload = await this.emailService.verifyTokenAndGetPayload(
+      token,
+      'password-reset',
+    );
+
+    if (!payload) throw new UnauthorizedException();
+    res.clearCookie('reset_password_token');
+    return this.authService.passwordReset(
+      body.code,
+      body.password,
+      payload.email,
+    );
+  }
+
+  // ─────────────────────────────────────────────
+  // ▶ TOKEN MANAGEMENT
+  // ─────────────────────────────────────────────
 
   @Post('refresh')
-  async refresh(
+  async refreshToken(
     @Req() req: Request,
     @Res({ passthrough: true }) res: Response,
   ) {
-    const refreshToken = await req.cookies?.['refresh_token'];
-    // const cookieHeader = req.headers.cookie;
-    // const refreshToken = cookieHeader
-    //   ? cookieHeader
-    //       .split(';')
-    //       .map((cookie) => cookie.trim())
-    //       .find((cookie) => cookie.startsWith('refresh_token='))
-    //       ?.split('=')[1]
-    //   : undefined;
-
+    const refreshToken = req.cookies?.['refresh_token'];
     if (!refreshToken) throw new UnauthorizedException();
 
     const tokens = await this.authService.refreshTokens(refreshToken);
@@ -226,7 +293,6 @@ export class AuthController {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
       sameSite: 'strict',
-
       path: '/',
       maxAge: 7 * 24 * 60 * 60 * 1000,
     });
@@ -234,34 +300,38 @@ export class AuthController {
     return { accessToken: tokens.accessToken };
   }
 
-  @UseGuards(AuthGuard('local'))
-  @Post('login')
-  async login(
-    @Req()
-    req: Request & { user: Pick<User, 'id' | 'email' | 'emailVerified'> },
-    @Res({ passthrough: true }) res: Response,
-  ) {
-    if (!req.user.emailVerified) {
-      throw new ForbiddenException('Please verify your email first');
-    }
-    const tokens = await this.authService.login(req.user);
+  @Post('logout')
+  async logout(@Req() req: Request, @Res({ passthrough: true }) res: Response) {
+    const refreshToken = req.cookies['refresh_token'];
+    if (!refreshToken)
+      throw new UnauthorizedException('No refresh token found');
 
-    res.cookie('refresh_token', tokens.refreshToken, {
+    await this.authService.logout(refreshToken);
+
+    res.clearCookie('refresh_token', {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
       sameSite: 'strict',
-
       path: '/',
-      maxAge: 7 * 24 * 60 * 60 * 1000,
     });
 
-    return { accessToken: tokens.accessToken };
+    return { message: 'Logged out successfully' };
   }
+
+  @Get('check-refresh')
+  async checkRefreshToken(@Req() req: Request) {
+    const hasToken = Boolean(req.cookies?.['refresh_token']);
+    return { hasRefreshToken: hasToken };
+  }
+
+  // ─────────────────────────────────────────────
+  // ▶ GOOGLE OAUTH
+  // ─────────────────────────────────────────────
 
   @Get('google')
   @UseGuards(AuthGuard('google'))
   async googleLogin() {
-    // Redirects to Google
+    // Redirect to Google
   }
 
   @Get('google/callback')
@@ -273,14 +343,10 @@ export class AuthController {
   ) {
     const tokens = await this.authService.login(req.user);
 
-    // Here you can generate JWT, set cookie, etc.
-    // req.user contains the data from GoogleStrategy.validate()
-
     res.cookie('refresh_token', tokens.refreshToken, {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
       sameSite: 'strict',
-
       path: '/',
       maxAge: 7 * 24 * 60 * 60 * 1000,
     });
@@ -289,11 +355,9 @@ export class AuthController {
       httpOnly: false,
       secure: process.env.NODE_ENV === 'production',
       sameSite: 'strict',
-
       maxAge: 30 * 1000,
     });
 
-    // return { accessToken: tokens.accessToken };
     return res.redirect(`${process.env.REDIRECT_URL}/auth/google/success`);
   }
 }
