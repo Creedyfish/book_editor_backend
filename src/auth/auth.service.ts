@@ -1,5 +1,10 @@
 import { Injectable } from '@nestjs/common';
-import { ForbiddenException, UnauthorizedException } from '@nestjs/common';
+import {
+  ForbiddenException,
+  UnauthorizedException,
+  BadRequestException,
+  NotFoundException,
+} from '@nestjs/common';
 import { DatabaseService } from 'src/database/database.service';
 import * as bcrypt from 'bcrypt';
 import { JwtService } from '@nestjs/jwt';
@@ -8,11 +13,6 @@ import { randomUUID, createHash } from 'crypto';
 import { MailService } from 'src/mail/mail.service';
 @Injectable()
 export class AuthService {
-  constructor(
-    private databaseService: DatabaseService,
-    private jwtService: JwtService,
-  ) {}
-
   private generateCode(length = 6): string {
     const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
     let code = '';
@@ -21,6 +21,15 @@ export class AuthService {
     }
     return code;
   }
+  constructor(
+    private databaseService: DatabaseService,
+    private jwtService: JwtService,
+    private mailService: MailService,
+  ) {}
+
+  // -------------------------------
+  // User Registration & Verification
+  // -------------------------------
 
   async createUser(email: string, password: string) {
     const existingUser = await this.databaseService.user.findUnique({
@@ -56,11 +65,25 @@ export class AuthService {
         expiresAt: new Date(Date.now() + 15 * 60 * 1000),
       },
     });
-    console.log(code);
+
     return code;
   }
 
-  async UserCodeVerification(code: string, email: string) {
+  async createResetPasswordCode(userId: string): Promise<string> {
+    const code = this.generateCode();
+    const hashedCode = await bcrypt.hash(code, 10);
+    await this.databaseService.passwordResetCode.create({
+      data: {
+        userId,
+        code: hashedCode,
+        expiresAt: new Date(Date.now() + 15 * 60 * 1000),
+      },
+    });
+
+    return code;
+  }
+
+  async verifyUserEmailCode(code: string, email: string) {
     const user = await this.databaseService.user.findUnique({
       where: { email },
     });
@@ -95,10 +118,154 @@ export class AuthService {
       data: { emailVerified: true },
     });
 
-    await this.databaseService.emailVerificationCode.delete({
-      where: { id: record.id },
+    await this.databaseService.emailVerificationCode.deleteMany({
+      where: { userId: user.id },
     });
-    console.log('user Verified');
+    return user;
+  }
+
+  async resendEmailVerificationCode(email: string) {
+    const user = await this.databaseService.user.findUnique({
+      where: { email },
+    });
+
+    if (!user) {
+      throw new ForbiddenException('User not found');
+    }
+
+    // ✅ Check if a *non-expired* code exists
+    const existingCode =
+      await this.databaseService.emailVerificationCode.findFirst({
+        where: {
+          userId: user.id,
+          expiresAt: {
+            gt: new Date(),
+          },
+        },
+        orderBy: {
+          createdAt: 'desc',
+        },
+      });
+
+    if (existingCode) {
+      // ✅ Prevent abuse: don’t resend if a valid code was recently sent
+      const timeSinceLastSent =
+        Date.now() - new Date(existingCode.createdAt).getTime();
+      const RESEND_TIMEOUT = 60 * 1000; // 1 minute
+      if (timeSinceLastSent < RESEND_TIMEOUT) {
+        throw new ForbiddenException(
+          'Please wait before requesting another code.',
+        );
+      }
+
+      // 🧹 Clean up old code before issuing a new one
+      await this.databaseService.emailVerificationCode.deleteMany({
+        where: { userId: user.id },
+      });
+    }
+
+    // ✅ Create new code
+    const code = await this.createEmailVerificationCode(user.id);
+
+    // ✅ Send new email
+    await this.mailService.sendCodeEmail(
+      user.email,
+      code,
+      'email-verification',
+    );
+  }
+
+  async requestPasswordReset(email: string) {
+    const user = await this.databaseService.user.findUnique({
+      where: { email: email },
+    });
+
+    if (!user) throw new NotFoundException('User not found');
+
+    const code = await this.createResetPasswordCode(user.id);
+    const hashedCode = await bcrypt.hash(code, 10);
+    const expiresAt = new Date(Date.now() + 1000 * 60 * 15); // 10 minutes
+
+    await this.databaseService.passwordResetCode.create({
+      data: {
+        userId: user.id,
+        code: hashedCode,
+        expiresAt,
+      },
+    });
+    await this.mailService.sendCodeEmail(user.email, code, 'password-reset');
+    return { message: 'Password reset code sent to your email' };
+  }
+
+  async passwordReset(code: string, password: string, email: string) {
+    const user = await this.databaseService.user.findUnique({
+      where: { email: email },
+    });
+
+    if (!user) {
+      throw new ForbiddenException();
+    }
+
+    const record = await this.databaseService.passwordResetCode.findFirst({
+      where: {
+        userId: user.id,
+        expiresAt: {
+          gt: new Date(),
+        },
+      },
+      orderBy: {
+        createdAt: 'desc',
+      },
+    });
+
+    if (!record) {
+      throw new ForbiddenException('Verification code not found or expired.');
+    }
+
+    const isMatch = await bcrypt.compare(code, record.code);
+    if (!isMatch) {
+      throw new ForbiddenException('Invalid verification code.');
+    }
+
+    const hashed = await bcrypt.hash(password, 10);
+    await this.databaseService.user.update({
+      where: { id: user.id },
+      data: { password: hashed },
+    });
+
+    await this.databaseService.passwordResetCode.deleteMany({
+      where: { userId: user.id },
+    });
+    return { message: 'Password has been reset' };
+  }
+  // -------------------------------
+  // User Authentication
+  // -------------------------------
+
+  async verifyTurnstileToken(token: string) {
+    const secret = process.env.TURNSTILE_SECRET_KEY || '';
+
+    const response = await fetch(
+      'https://challenges.cloudflare.com/turnstile/v0/siteverify',
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded',
+        },
+        body: new URLSearchParams({
+          secret,
+          response: token,
+        }),
+      },
+    );
+
+    const data = await response.json();
+
+    if (!data.success) {
+      throw new BadRequestException('Something went wrong please try again');
+    }
+
+    return true;
   }
 
   async validateUser(email: string, password: string) {
@@ -108,27 +275,27 @@ export class AuthService {
 
     if (!user || !user.password) return null;
 
-    if (!user.emailVerified) {
-      throw new UnauthorizedException('Please verify your email first');
-    }
-
     const isMatch = await bcrypt.compare(password, user.password);
     if (!isMatch) return null;
 
     return user;
   }
 
+  // -------------------------------
+  // Token Generation & Session Management
+  // -------------------------------
+
   async generateTokens(userId: string, email: string) {
     const payload = { sub: userId, email };
 
     const accessToken = await this.jwtService.signAsync(payload, {
       secret: process.env.JWT_SECRET,
-      expiresIn: '1m',
+      expiresIn: '15m',
     });
 
     const refreshToken = await this.jwtService.signAsync(payload, {
       secret: process.env.JWT_REFRESH_SECRET,
-      expiresIn: '5d',
+      expiresIn: '7d',
       jwtid: randomUUID(),
     });
 

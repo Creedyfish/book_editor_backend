@@ -9,6 +9,6 @@ export class UserController {
   @UseGuards(AuthGuard('jwt'))
   @Get('profile')
   async getProfile(@Request() req) {
-    return this.userService.getUser(req.user.id); // This is set by the JwtStrategy's validate()
+    return this.userService.getUser(req.user.id);
   }
 }
