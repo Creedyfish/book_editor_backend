@@ -14,7 +14,7 @@ export class UserService {
   > | null> {
     const user = await this.databaseService.user.findUnique({
       where: { id },
-      select: { email: true, createdAt: true, updatedAt: true },
+      select: { email: true, createdAt: true, updatedAt: true, username: true },
     });
     if (!user) return null;
 
