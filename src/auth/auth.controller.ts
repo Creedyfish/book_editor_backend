@@ -79,7 +79,9 @@ export class AuthController {
   @UseGuards(AuthGuard('local'))
   async login(
     @Req()
-    req: Request & { user: Pick<User, 'id' | 'email' | 'emailVerified'> },
+    req: Request & {
+      user: Pick<User, 'id' | 'email' | 'emailVerified' | 'username'>;
+    },
     @Body() body: LoginDto,
     @Res({ passthrough: true }) res: Response,
   ) {
@@ -147,6 +149,7 @@ export class AuthController {
     const tokens = await this.authService.login({
       id: verifiedUser.id,
       email: verifiedUser.email,
+      username: verifiedUser.username,
     });
 
     res.cookie('refresh_token', tokens.refreshToken, {
@@ -338,7 +341,7 @@ export class AuthController {
   @UseGuards(AuthGuard('google'))
   @UseFilters(OAuthExceptionFilter)
   async googleCallback(
-    @Req() req: Request & { user: Pick<User, 'id' | 'email'> },
+    @Req() req: Request & { user: Pick<User, 'id' | 'email' | 'username'> },
     @Res({ passthrough: true }) res: Response,
   ) {
     const tokens = await this.authService.login(req.user);

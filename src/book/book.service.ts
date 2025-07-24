@@ -1,9 +1,14 @@
 // src/book/services/book.service.ts
-import { Injectable, NotFoundException } from '@nestjs/common';
+import {
+  Injectable,
+  NotFoundException,
+  ConflictException,
+} from '@nestjs/common';
 import { DatabaseService } from 'src/database/database.service';
 import { CreateBookDto } from './dto/create-book.dto';
 import { UpdateBookDto } from './dto/update-book.dto';
 import { BookProgress } from 'generated/prisma';
+import slugify from 'slugify';
 @Injectable()
 export class BookService {
   constructor(private readonly databaseService: DatabaseService) {}
@@ -19,6 +24,14 @@ export class BookService {
       where: { id: userId },
       select: { username: true },
     });
+
+    const isUnique = await this.databaseService.book.findFirst({
+      where: { title: bookData.title },
+    });
+
+    if (isUnique) {
+      throw new ConflictException(`A book with the same title already exists.`);
+    }
 
     if (!user || !user.username) {
       throw new NotFoundException(
@@ -36,10 +49,16 @@ export class BookService {
     if (notFoundTags.length > 0) {
       throw new Error(`Tags not found: ${notFoundTags.join(', ')}`);
     }
+    const slug = slugify(bookData.title, {
+      lower: true,
+      strict: true, // remove special chars
+      trim: true,
+    });
 
     return this.databaseService.book.create({
       data: {
         ...bookData,
+        slug: slug,
         userId,
         tags: {
           create: existingTags.map((tag) => ({
@@ -67,6 +86,7 @@ export class BookService {
 
     const results = books.map((book) => ({
       id: book.id,
+      slug: book.slug,
       title: book.title,
       description: book.description,
       status: book.status,
@@ -124,7 +144,7 @@ export class BookService {
       this.databaseService.book.findMany({
         where: {
           userId: user.id,
-          status: 'PUBLIC',
+          status: { in: ['PUBLIC', 'PUBLISHED'] },
         },
         include: {
           tags: {
@@ -140,7 +160,7 @@ export class BookService {
       this.databaseService.book.count({
         where: {
           userId: user.id,
-          status: 'PUBLIC',
+          status: { in: ['PUBLIC', 'PUBLISHED'] },
         },
       }),
     ]);
@@ -186,7 +206,7 @@ export class BookService {
     const skip = (page - 1) * limit;
 
     const where: any = {
-      status: 'PUBLIC',
+      status: { in: ['PUBLIC', 'PUBLISHED'] },
       title: { contains: search, mode: 'insensitive' },
     };
 

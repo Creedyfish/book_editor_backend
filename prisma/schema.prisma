@@ -74,22 +74,23 @@ model PasswordResetCode {
 }
 
 model Book {
-  id          String        @id @default(uuid())
+  id          String       @id @default(uuid())
   userId      String
   title       String
+  slug        String       @unique
   description String
-  status      BookStatus    @default(DRAFT) // For visibility
-  progress    BookProgress  @default(ONGOING) // For lifecycle state
-  coverImage  String? // URL to the cover image
-  bannerImage String? // URL to the banner image
-  createdAt   DateTime      @default(now())
-  updatedAt   DateTime      @updatedAt
-  user        User          @relation(fields: [userId], references: [id])
-  comments    BookComment[]
-  tags        BookTag[]
-  chapters    Chapter[]
+  status      BookStatus   @default(DRAFT)
+  progress    BookProgress @default(ONGOING)
+  coverImage  String?
+  bannerImage String?
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
 
-  @@index([id])
+  user     User          @relation(fields: [userId], references: [id])
+  comments BookComment[]
+  tags     BookTag[]
+  chapters Chapter[]
+
   @@index([title])
 }
 
@@ -106,6 +107,7 @@ model Chapter {
   book        Book             @relation(fields: [bookId], references: [id])
   comments    ChapterComment[]
 
+  @@unique([bookId, title])
   @@index([bookId])
   @@index([bookId, order])
   @@index([title])

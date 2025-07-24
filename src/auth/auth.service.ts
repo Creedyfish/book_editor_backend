@@ -285,8 +285,8 @@ export class AuthService {
   // Token Generation & Session Management
   // -------------------------------
 
-  async generateTokens(userId: string, email: string) {
-    const payload = { sub: userId, email };
+  async generateTokens(userId: string, email: string, username?: string) {
+    const payload = { sub: userId, email, username: username };
 
     const accessToken = await this.jwtService.signAsync(payload, {
       secret: process.env.JWT_SECRET,
@@ -305,8 +305,12 @@ export class AuthService {
     };
   }
 
-  async login(user: Pick<User, 'id' | 'email'>) {
-    const tokens = await this.generateTokens(user.id, user.email);
+  async login(user: Pick<User, 'id' | 'email' | 'username'>) {
+    const tokens = await this.generateTokens(
+      user.id,
+      user.email,
+      user.username ?? undefined,
+    );
     await this.createSession(user.id, tokens.refreshToken);
 
     return tokens;
@@ -365,6 +369,7 @@ export class AuthService {
       const newTokens = await this.generateTokens(
         session.user.id,
         session.user.email,
+        session.user.username ?? undefined,
       );
       await this.createSession(session.user.id, newTokens.refreshToken);
 
