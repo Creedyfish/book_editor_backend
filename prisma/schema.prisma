@@ -77,11 +77,12 @@ model Book {
   id          String        @id @default(uuid())
   userId      String
   title       String
+  slug        String        @unique
   description String
-  status      BookStatus    @default(DRAFT) // For visibility
-  progress    BookProgress  @default(ONGOING) // For lifecycle state
-  coverImage  String? // URL to the cover image
-  bannerImage String? // URL to the banner image
+  status      BookStatus    @default(DRAFT)
+  progress    BookProgress  @default(ONGOING)
+  coverImage  String?
+  bannerImage String?
   createdAt   DateTime      @default(now())
   updatedAt   DateTime      @updatedAt
   user        User          @relation(fields: [userId], references: [id])
@@ -89,7 +90,6 @@ model Book {
   tags        BookTag[]
   chapters    Chapter[]
 
-  @@index([id])
   @@index([title])
 }
 
@@ -106,6 +106,7 @@ model Chapter {
   book        Book             @relation(fields: [bookId], references: [id])
   comments    ChapterComment[]
 
+  @@unique([bookId, title])
   @@index([bookId])
   @@index([bookId, order])
   @@index([title])
@@ -120,8 +121,8 @@ model Tag {
 model BookTag {
   bookId String
   tagId  String
-  book   Book   @relation(fields: [bookId], references: [id])
-  tag    Tag    @relation(fields: [tagId], references: [id])
+  book   Book   @relation(fields: [bookId], references: [id], onDelete: Cascade)
+  tag    Tag    @relation(fields: [tagId], references: [id], onDelete: Cascade)
 
   @@id([bookId, tagId])
   @@index([bookId])

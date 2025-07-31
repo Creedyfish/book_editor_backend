@@ -35,5 +35,5 @@ export class CreateBookDto {
   @IsOptional()
   @IsArray()
   @IsString({ each: true })
-  tagNames?: string[];
+  tags?: string[];
 }

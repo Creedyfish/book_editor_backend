@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { User } from 'generated/prisma';
 import { DatabaseService } from 'src/database/database.service';
+import { BadRequestException } from '@nestjs/common';
 
 @Injectable()
 export class UserService {
@@ -19,5 +20,18 @@ export class UserService {
     if (!user) return null;
 
     return user;
+  }
+
+  async usernameUpdate(username: string, userID: string) {
+    const existing = await this.databaseService.user.findUnique({
+      where: { username },
+    });
+    if (existing && existing.id !== userID) {
+      throw new BadRequestException('Username is already taken');
+    }
+    return this.databaseService.user.update({
+      where: { id: userID },
+      data: { username },
+    });
   }
 }
