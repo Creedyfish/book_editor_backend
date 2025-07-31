@@ -3,6 +3,7 @@ import {
   Injectable,
   NotFoundException,
   ConflictException,
+  ForbiddenException,
 } from '@nestjs/common';
 import { DatabaseService } from 'src/database/database.service';
 import { CreateBookDto } from './dto/create-book.dto';
@@ -18,7 +19,7 @@ export class BookService {
   // --------------------------------------
 
   async create(userId: string, dto: CreateBookDto) {
-    const { tagNames = [], ...bookData } = dto;
+    const { tags = [], ...bookData } = dto;
 
     const user = await this.databaseService.user.findUnique({
       where: { id: userId },
@@ -40,34 +41,43 @@ export class BookService {
     }
 
     const existingTags = await this.databaseService.tag.findMany({
-      where: { name: { in: tagNames } },
+      where: { name: { in: tags } },
     });
 
     const foundTagNames = new Set(existingTags.map((tag) => tag.name));
-    const notFoundTags = tagNames.filter((name) => !foundTagNames.has(name));
+    const notFoundTags = tags.filter((name) => !foundTagNames.has(name));
 
     if (notFoundTags.length > 0) {
       throw new Error(`Tags not found: ${notFoundTags.join(', ')}`);
     }
+
     const slug = slugify(bookData.title, {
       lower: true,
-      strict: true, // remove special chars
+      strict: true,
       trim: true,
     });
 
-    return this.databaseService.book.create({
+    const book = await this.databaseService.book.create({
       data: {
         ...bookData,
         slug: slug,
         userId,
         tags: {
           create: existingTags.map((tag) => ({
-            tag: { connect: { id: tag.id } },
+            tagId: tag.id,
           })),
         },
       },
-      include: { tags: { include: { tag: true } } },
+      include: {
+        tags: {
+          include: {
+            tag: true,
+          },
+        },
+      },
     });
+
+    return book;
   }
 
   async findAll(userId: string, page = 1, limit = 20) {
@@ -95,7 +105,7 @@ export class BookService {
       bannerImage: book.bannerImage,
       createdAt: book.createdAt,
       updatedAt: book.updatedAt,
-      tagNames: book.tags.map((bt) => bt.tag.name),
+      tags: book.tags.map((bt) => bt.tag.name),
     }));
 
     return {
@@ -109,17 +119,100 @@ export class BookService {
     };
   }
 
-  async findOne(id: string) {
-    const book = await this.databaseService.book.findUnique({ where: { id } });
+  async findOne(id: string, userId: string) {
+    const book = await this.databaseService.book.findUnique({
+      where: { id },
+      include: { tags: { include: { tag: true } } },
+    });
+
     if (!book) throw new NotFoundException('Book not found');
-    return book;
+
+    const isOwner = book.userId === userId;
+
+    if (!isOwner) {
+      throw new ForbiddenException('Book not found');
+    }
+
+    return {
+      ...book,
+      tags: book.tags.map((bt) => bt.tag.name),
+    };
   }
 
   async update(id: string, dto: UpdateBookDto) {
-    return this.databaseService.book.update({
-      where: { id },
-      data: { ...dto },
-    });
+    const { tags = [], ...bookData } = dto;
+
+    // Optional: check for unique title
+    if (bookData.title) {
+      const isDuplicate = await this.databaseService.book.findFirst({
+        where: {
+          title: bookData.title,
+          NOT: { id },
+        },
+      });
+
+      if (isDuplicate) {
+        throw new ConflictException(
+          `A book with the same title already exists.`,
+        );
+      }
+    }
+
+    // FIXED: Only process tags if they are actually provided in the DTO
+    if (tags.length > 0) {
+      const existingTags = await this.databaseService.tag.findMany({
+        where: { name: { in: tags } },
+      });
+
+      const foundTagNames = new Set(existingTags.map((tag) => tag.name));
+      const notFoundTags = tags.filter((name) => !foundTagNames.has(name));
+
+      if (notFoundTags.length > 0) {
+        throw new Error(`Tags not found: ${notFoundTags.join(', ')}`);
+      }
+
+      const [_, updatedBook] = await this.databaseService.$transaction([
+        this.databaseService.bookTag.deleteMany({
+          where: { bookId: id },
+        }),
+
+        this.databaseService.book.update({
+          where: { id },
+          data: {
+            ...bookData,
+            tags: {
+              create: existingTags.map((tag) => ({
+                tagId: tag.id, // FIXED: Use correct syntax
+              })),
+            },
+          },
+          include: {
+            tags: {
+              include: {
+                tag: true,
+              },
+            },
+          },
+        }),
+      ]);
+
+      return updatedBook;
+    } else {
+      // FIXED: If no tags provided, just update the book data without touching tags
+      const updatedBook = await this.databaseService.book.update({
+        where: { id },
+        data: bookData,
+        include: {
+          tags: {
+            include: {
+              tag: true,
+            },
+          },
+        },
+      });
+
+      return updatedBook;
+    }
   }
 
   async remove(id: string) {
@@ -129,6 +222,55 @@ export class BookService {
   // --------------------------------------
   // 🌍 PUBLIC METHODS (Readers)
   // --------------------------------------
+
+  async getPublicBookBySlug(slug: string) {
+    const book = await this.databaseService.book.findFirst({
+      where: {
+        slug,
+        status: {
+          in: ['PUBLIC', 'PUBLISHED'],
+        },
+      },
+      select: {
+        id: true,
+        title: true,
+        slug: true,
+        description: true,
+        progress: true,
+        status: true,
+        updatedAt: true,
+
+        tags: {
+          select: {
+            tag: {
+              select: {
+                id: true,
+                name: true,
+              },
+            },
+          },
+        },
+        user: {
+          select: { username: true },
+        },
+      },
+    });
+
+    if (!book) return null;
+
+    const transformed = {
+      title: book.title,
+      slug: book.slug,
+      description: book.description,
+      progress: book.progress,
+      status: book.status,
+      updatedAt: book.updatedAt.toISOString(),
+      authorName: book.user.username,
+      tags: book.tags.map((t) => t.tag),
+    };
+
+    return transformed;
+  }
 
   async findAllVisibleByUser(username: string, page = 1, limit = 10) {
     const skip = (page - 1) * limit;
@@ -175,7 +317,7 @@ export class BookService {
         bannerImage: book.bannerImage,
         createdAt: book.createdAt,
         updatedAt: book.updatedAt,
-        tagNames: book.tags.map((bt) => bt.tag.name),
+        tags: book.tags.map((bt) => bt.tag.name),
       })),
       meta: {
         total,
@@ -260,7 +402,7 @@ export class BookService {
         bannerImage: book.bannerImage,
         createdAt: book.createdAt,
         updatedAt: book.updatedAt,
-        tagNames: book.tags.map((bt) => bt.tag.name),
+        tags: book.tags.map((bt) => bt.tag.name),
       })),
       meta: {
         total,

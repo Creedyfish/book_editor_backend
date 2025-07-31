@@ -3,7 +3,7 @@ import { Injectable, BadRequestException } from '@nestjs/common';
 import { S3Service } from '../aws/s3.service';
 import { v4 as uuidv4 } from 'uuid';
 import * as sharp from 'sharp';
-
+import slugify from 'slugify';
 type UploadResults = {
   coverUrl: string | null;
   bannerUrl: string | null;
@@ -107,12 +107,16 @@ export class UploadService {
   }
 
   private extractKeyFromUrl(url: string): string {
-    // Extract the key from the S3 URL
-    const urlParts = url.split('/');
-    const bucketIndex = urlParts.findIndex((part) =>
-      part.includes('amazonaws.com'),
-    );
-    return urlParts.slice(bucketIndex + 1).join('/');
+    try {
+      const parsed = new URL(url);
+      // This gives you just the path, e.g., "/books/123/cover.jpg"
+      const pathname = parsed.pathname;
+      // Remove the leading slash
+      return pathname.startsWith('/') ? pathname.slice(1) : pathname;
+    } catch (error) {
+      console.error(`[extractKeyFromUrl] Failed to parse URL: ${url}`, error);
+      throw new Error('Invalid URL format');
+    }
   }
 
   async deleteBookAssets(coverUrl?: string, bannerUrl?: string): Promise<void> {
@@ -120,20 +124,35 @@ export class UploadService {
 
     if (coverUrl) {
       const coverKey = this.extractKeyFromUrl(coverUrl);
-      deletePromises.push(this.s3Service.deleteFile(coverKey));
+      const coverPromise = this.s3Service
+        .deleteFile(coverKey)
+        .catch((err) =>
+          console.error(`[ERROR] Failed to delete cover: ${coverKey}`, err),
+        );
+      deletePromises.push(coverPromise);
     }
 
     if (bannerUrl) {
       const bannerKey = this.extractKeyFromUrl(bannerUrl);
-      deletePromises.push(this.s3Service.deleteFile(bannerKey));
+
+      const bannerPromise = this.s3Service
+        .deleteFile(bannerKey)
+        .catch((err) =>
+          console.error(`[ERROR] Failed to delete banner: ${bannerKey}`, err),
+        );
+      deletePromises.push(bannerPromise);
     }
 
     await Promise.all(deletePromises);
   }
 
+  async deleteBookFolder(username: string, book: string) {
+    return this.s3Service.deleteBookFolder(username, book);
+  }
+
   async updateBookAssets(
-    authorId: string,
-    bookId: string,
+    username: string,
+    title: string,
     existingCoverUrl?: string,
     existingBannerUrl?: string,
     newCover?: Express.Multer.File,
@@ -144,18 +163,31 @@ export class UploadService {
       bannerUrl: existingBannerUrl || null,
     };
 
+    const slug = slugify(title, {
+      lower: true,
+      strict: true, // remove special chars
+      trim: true,
+    });
+
     // Upload new cover if provided
     if (newCover) {
       await this.validateFile(newCover, 'cover');
 
       const coverExtension = this.getFileExtension(newCover.originalname);
-      const coverKey = `books/${authorId}/${bookId}/cover-${uuidv4()}.${coverExtension}`;
+      const coverKey = `books/${username}/${slug}/cover-${uuidv4()}.${coverExtension}`;
       results.coverUrl = await this.s3Service.uploadFile(newCover, coverKey);
 
       // Delete old cover if it exists
       if (existingCoverUrl) {
         const oldCoverKey = this.extractKeyFromUrl(existingCoverUrl);
-        await this.s3Service.deleteFile(oldCoverKey).catch(console.error);
+        try {
+          await this.s3Service.deleteFile(oldCoverKey);
+        } catch (err) {
+          console.error(
+            `[ERROR] Failed to delete old cover: ${oldCoverKey}`,
+            err,
+          );
+        }
       }
     }
 
@@ -164,16 +196,27 @@ export class UploadService {
       await this.validateFile(newBanner, 'banner');
 
       const bannerExtension = this.getFileExtension(newBanner.originalname);
-      const bannerKey = `books/${authorId}/${bookId}/banner-${uuidv4()}.${bannerExtension}`;
+      const bannerKey = `books/${username}/${slug}/banner-${uuidv4()}.${bannerExtension}`;
       results.bannerUrl = await this.s3Service.uploadFile(newBanner, bannerKey);
 
       // Delete old banner if it exists
       if (existingBannerUrl) {
         const oldBannerKey = this.extractKeyFromUrl(existingBannerUrl);
-        await this.s3Service.deleteFile(oldBannerKey).catch(console.error);
+        try {
+          await this.s3Service.deleteFile(oldBannerKey);
+        } catch (err) {
+          console.error(
+            `[ERROR] Failed to delete old banner: ${oldBannerKey}`,
+            err,
+          );
+        }
       }
     }
 
     return results;
+  }
+
+  async renameBookAssets(username: string, oldSlug: string, newSlug: string) {
+    return this.s3Service.renameBookAssets(username, oldSlug, newSlug);
   }
 }

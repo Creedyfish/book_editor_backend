@@ -45,9 +45,9 @@ export class AuthController {
     const verifyCloudfare = await this.authService.verifyTurnstileToken(
       body.token,
     );
-    console.log('turnstile verified');
-    if (!verifyCloudfare) throw new UnauthorizedException('Please try again');
 
+    if (!verifyCloudfare) throw new UnauthorizedException('Please try again');
+    console.log('turnstile verified');
     const newUser = await this.authService.createUser(
       body.email,
       body.password,
