@@ -288,19 +288,39 @@ export class AuthController {
     @Res({ passthrough: true }) res: Response,
   ) {
     const refreshToken = req.cookies?.['refresh_token'];
-    if (!refreshToken) throw new UnauthorizedException();
 
-    const tokens = await this.authService.refreshTokens(refreshToken);
+    if (!refreshToken) {
+      res.clearCookie('refresh_token', {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === 'production',
+        sameSite: 'strict',
+        path: '/',
+      });
+      throw new UnauthorizedException();
+    }
 
-    res.cookie('refresh_token', tokens.refreshToken, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: 'strict',
-      path: '/',
-      maxAge: 7 * 24 * 60 * 60 * 1000,
-    });
+    try {
+      const tokens = await this.authService.refreshTokens(refreshToken);
 
-    return { accessToken: tokens.accessToken };
+      res.cookie('refresh_token', tokens.refreshToken, {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === 'production',
+        sameSite: 'strict',
+        path: '/',
+        maxAge: 7 * 24 * 60 * 60 * 1000,
+      });
+
+      return { accessToken: tokens.accessToken };
+    } catch (err) {
+      // 🧹 If refresh token is invalid or session is revoked — clear the cookie
+      res.clearCookie('refresh_token', {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === 'production',
+        sameSite: 'strict',
+        path: '/',
+      });
+      throw new UnauthorizedException('Session invalid or expired');
+    }
   }
 
   @Post('logout')
