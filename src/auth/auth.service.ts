@@ -461,6 +461,79 @@ export class AuthService {
       }
     });
   }
+  // async refreshTokens(refreshToken: string) {
+  //   return this.databaseService.$transaction(async (tx) => {
+  //     try {
+  //       console.log('🔐 [1] Verifying refresh token...');
+  //       const payload = await this.jwtService.verifyAsync(refreshToken, {
+  //         secret: process.env.JWT_REFRESH_SECRET,
+  //       });
+  //       console.log('✅ [2] Token verified. User ID:', payload.sub);
+
+  //       const hashedToken = createHash('sha256')
+  //         .update(refreshToken)
+  //         .digest('hex');
+  //       console.log('🔁 [3] Hashed refresh token:', hashedToken);
+
+  //       console.log('🔍 [4] Looking for active session in DB...');
+  //       const session = await tx.session.findFirst({
+  //         where: {
+  //           userId: payload.sub,
+  //           refreshToken: hashedToken,
+  //           revoked: false,
+  //           expiresAt: {
+  //             gt: new Date(),
+  //           },
+  //         },
+  //         include: { user: true },
+  //       });
+
+  //       if (!session || !session.user) {
+  //         console.warn('⛔ [5] Invalid or expired session');
+  //         throw new ForbiddenException('Invalid or expired session');
+  //       }
+
+  //       console.log('✅ [6] Session found. ID:', session.id);
+
+  //       console.log('🛑 [7] Revoking old session...');
+  //       await tx.session.update({
+  //         where: { id: session.id },
+  //         data: { revoked: true },
+  //       });
+  //       console.log('🔁 [8] Old session revoked.');
+
+  //       console.log('🎟️ [9] Generating new tokens...');
+  //       const newTokens = await this.generateTokens(
+  //         session.user.id,
+  //         session.user.email,
+  //         session.user.username ?? undefined,
+  //       );
+  //       console.log('✅ [10] Tokens generated.');
+
+  //       const newHashedToken = createHash('sha256')
+  //         .update(newTokens.refreshToken)
+  //         .digest('hex');
+  //       const expiresAt = new Date(Date.now() + 1000 * 60 * 60 * 24 * 5);
+  //       console.log('🔐 [11] Hashed new refresh token.');
+
+  //       console.log('🗃️ [12] Storing new session...');
+  //       await tx.session.create({
+  //         data: {
+  //           userId: session.user.id,
+  //           refreshToken: newHashedToken,
+  //           revoked:false,
+  //           expiresAt,
+  //         },
+  //       });
+  //       console.log('✅ [13] New session stored. Returning tokens...');
+
+  //       return newTokens;
+  //     } catch (err) {
+  //       console.error('🚫 [ERR] Refresh token failed:', err.message);
+  //       throw new UnauthorizedException('Access denied');
+  //     }
+  //   });
+  // }
 
   async logout(refreshToken: string) {
     return this.databaseService.$transaction(async (tx) => {
