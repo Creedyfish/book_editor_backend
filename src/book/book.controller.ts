@@ -73,7 +73,7 @@ export class BookController {
   }
 
   // Slug before ID to avoid conflict
-  @Get('slug/:slug')
+  @Get(':slug')
   async getPublicBook(@Param('slug') slug: string) {
     const book = await this.bookService.getPublicBookBySlug(slug);
     if (!book) {
@@ -83,6 +83,20 @@ export class BookController {
     return book;
   }
 
+  @Get('slug/:slug/:order')
+  async getPublicBookChapter(
+    @Param('slug') slug: string,
+    @Param('order') order: string, // will convert to number below
+  ) {
+    const chapter = await this.bookService.getPublicBookChapterByOrder(
+      slug,
+      Number(order),
+    );
+    if (!chapter) {
+      throw new NotFoundException('Chapter not found');
+    }
+    return chapter;
+  }
   // -----------------------------
   // 🟢 AUTHOR ROUTES (Authenticated)
   // -----------------------------
@@ -143,10 +157,15 @@ export class BookController {
     return this.bookService.findAll(req.user.id, page, limit);
   }
 
-  @UseGuards(AuthGuard('jwt'))
   @Get('id/:id')
-  async findOne(@Param('id') id: string, @Req() req) {
-    return this.bookService.findOne(id, req.user.id);
+  @UseGuards(AuthGuard('jwt'))
+  async findOne(
+    @Param('id') id: string,
+    @Req() req,
+    @Query('page', new ParseIntPipe({ optional: true })) page = 1,
+    @Query('limit', new ParseIntPipe({ optional: true })) limit = 10,
+  ) {
+    return this.bookService.findOne(id, req.user.id, page, limit);
   }
 
   // @UseGuards(AuthGuard('jwt'))

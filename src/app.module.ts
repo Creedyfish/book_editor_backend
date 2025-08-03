@@ -11,6 +11,7 @@ import { BookModule } from './book/book.module';
 import { S3Service } from './aws/s3.service';
 import { ConfigModule } from '@nestjs/config';
 import { UploadService } from './upload/upload.service';
+import { ChapterModule } from './chapter/chapter.module';
 
 @Module({
   imports: [
@@ -22,6 +23,7 @@ import { UploadService } from './upload/upload.service';
     ConfigModule.forRoot({
       isGlobal: true,
     }),
+    ChapterModule,
   ],
   controllers: [AppController],
   providers: [AppService, MailService, JwtService, S3Service, UploadService],

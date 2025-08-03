@@ -119,7 +119,7 @@ export class BookService {
     };
   }
 
-  async findOne(id: string, userId: string) {
+  async findOne(id: string, userId: string, page = 1, limit = 10) {
     const book = await this.databaseService.book.findUnique({
       where: { id },
       include: { tags: { include: { tag: true } } },
@@ -133,12 +133,37 @@ export class BookService {
       throw new ForbiddenException('Book not found');
     }
 
+    // Paginated chapters
+    const [chapters, totalChapters] = await this.databaseService.$transaction([
+      this.databaseService.chapter.findMany({
+        where: { bookId: id },
+        orderBy: { order: 'asc' },
+        skip: (page - 1) * limit,
+        take: limit,
+        select: {
+          id: true,
+          title: true,
+          order: true,
+          // exclude heavy content if not needed
+          // content: false,
+        },
+      }),
+      this.databaseService.chapter.count({
+        where: { bookId: id },
+      }),
+    ]);
+
     return {
       ...book,
       tags: book.tags.map((bt) => bt.tag.name),
+      chapters: {
+        data: chapters,
+        total: totalChapters,
+        page,
+        limit,
+      },
     };
   }
-
   async update(id: string, dto: UpdateBookDto) {
     const { tags = [], ...bookData } = dto;
 
@@ -223,7 +248,8 @@ export class BookService {
   // 🌍 PUBLIC METHODS (Readers)
   // --------------------------------------
 
-  async getPublicBookBySlug(slug: string) {
+  async getPublicBookBySlug(slug: string, page = 1, limit = 10) {
+    // 1. Fetch book metadata (excluding chapters)
     const book = await this.databaseService.book.findFirst({
       where: {
         slug,
@@ -237,9 +263,7 @@ export class BookService {
         slug: true,
         description: true,
         progress: true,
-        status: true,
         updatedAt: true,
-
         tags: {
           select: {
             tag: {
@@ -258,18 +282,99 @@ export class BookService {
 
     if (!book) return null;
 
-    const transformed = {
+    // 2. Fetch paginated chapters
+    const [chapters, totalChapters] = await this.databaseService.$transaction([
+      this.databaseService.chapter.findMany({
+        where: { bookId: book.id },
+        orderBy: { order: 'asc' },
+        skip: (page - 1) * limit,
+        take: limit,
+        select: {
+          title: true,
+          description: true,
+          order: true,
+          wordCount: true,
+          createdAt: true,
+          updatedAt: true,
+        },
+      }),
+      this.databaseService.chapter.count({
+        where: { bookId: book.id },
+      }),
+    ]);
+
+    // 3. Transform and return result
+    return {
       title: book.title,
       slug: book.slug,
       description: book.description,
       progress: book.progress,
-      status: book.status,
       updatedAt: book.updatedAt.toISOString(),
       authorName: book.user.username,
-      tags: book.tags.map((t) => t.tag),
+      tags: book.tags.map((bt) => bt.tag.name),
+      chapters,
+      pagination: {
+        page,
+        limit,
+        total: totalChapters,
+        totalPages: Math.ceil(totalChapters / limit),
+      },
     };
+  }
 
-    return transformed;
+  async getPublicBookChapterByOrder(slug: string, order: number) {
+    // 1. Find the book (only PUBLIC/PUBLISHED)
+    const book = await this.databaseService.book.findFirst({
+      where: {
+        slug,
+        status: {
+          in: ['PUBLIC', 'PUBLISHED'],
+        },
+      },
+      select: {
+        id: true,
+        title: true,
+        slug: true,
+        user: {
+          select: { username: true },
+        },
+      },
+    });
+
+    if (!book) return null;
+
+    // 2. Get the specific chapter by `order`
+    const chapter = await this.databaseService.chapter.findFirst({
+      where: {
+        bookId: book.id,
+        order,
+      },
+      select: {
+        title: true,
+        description: true,
+        content: true,
+        order: true,
+        wordCount: true,
+        createdAt: true,
+        updatedAt: true,
+      },
+    });
+
+    if (!chapter) return null;
+
+    // 3. Return combined data
+    return {
+      book: {
+        slug: book.slug,
+        title: book.title,
+        authorName: book.user.username,
+      },
+      chapter: {
+        ...chapter,
+        createdAt: chapter.createdAt.toISOString(),
+        updatedAt: chapter.updatedAt.toISOString(),
+      },
+    };
   }
 
   async findAllVisibleByUser(username: string, page = 1, limit = 10) {
