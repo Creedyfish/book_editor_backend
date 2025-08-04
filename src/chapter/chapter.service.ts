@@ -341,9 +341,9 @@ export class ChapterService {
     }
 
     // // Public books can be accessed by anyone
-    // if (book.status === 'PUBLIC' || book.status === 'PUBLISHED') {
-    //   return true;
-    // }
+    if (book.status === 'PUBLIC' || book.status === 'PUBLISHED') {
+      return true;
+    }
 
     // Private/Draft books only for owner
     return false;
@@ -362,5 +362,85 @@ export class ChapterService {
     }
 
     return 0;
+  }
+
+  // public
+
+  async findAllBySlug(
+    slug: string,
+    query: { page: number; limit: number },
+    userId?: string,
+  ) {
+    const book = await this.databaseService.book.findUnique({
+      where: { slug },
+      select: { id: true, userId: true, status: true },
+    });
+
+    if (!book) throw new NotFoundException('Book not found');
+
+    const canAccess = this.canAccessBook(book, userId);
+    if (!canAccess) throw new ForbiddenException('Access denied');
+
+    const { chapters, meta } = await this.findAll(book.id, query, userId);
+
+    const publicChapters = chapters.map(({ id, ...rest }) => rest); // remove `id`
+
+    return {
+      chapters: publicChapters,
+      meta,
+    };
+  }
+
+  async findOneBySlug(slug: string, chapterId: string, userId?: string) {
+    const book = await this.databaseService.book.findUnique({
+      where: { slug },
+      select: { id: true, userId: true, status: true },
+    });
+
+    if (!book) throw new NotFoundException('Book not found');
+
+    const canAccess = this.canAccessBook(book, userId);
+    if (!canAccess) throw new ForbiddenException('Access denied');
+
+    const chapter = await this.findOne(book.id, chapterId, userId);
+
+    // Remove sensitive fields before returning
+    const {
+      id,
+      book: { id: bookId, userId: bookUserId, ...restBook },
+      ...restChapter
+    } = chapter;
+
+    return {
+      ...restChapter,
+      book: restBook,
+    };
+  }
+
+  async findOneBySlugAndOrder(slug: string, order: number, userId?: string) {
+    const book = await this.databaseService.book.findUnique({
+      where: { slug },
+      select: { id: true, userId: true, status: true, slug: true, title: true },
+    });
+
+    if (!book) throw new NotFoundException('Book not found');
+
+    const canAccess = this.canAccessBook(book, userId);
+    if (!canAccess) throw new ForbiddenException('Access denied');
+
+    const chapter = await this.databaseService.chapter.findFirst({
+      where: {
+        bookId: book.id,
+        order,
+      },
+      include: {
+        _count: { select: { comments: true } },
+      },
+    });
+
+    if (!chapter) throw new NotFoundException('Chapter not found');
+
+    const { id, bookId, ...rest } = chapter;
+    return rest;
   }
 }

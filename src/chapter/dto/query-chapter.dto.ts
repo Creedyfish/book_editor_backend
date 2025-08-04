@@ -1,16 +1,18 @@
+// src/chapters/dto/query-chapter.dto.ts
+import { IsInt, Min, Max, IsOptional } from 'class-validator';
 import { Type } from 'class-transformer';
-import { IsInt, Min, IsOptional } from 'class-validator';
 
 export class ChapterQueryDto {
+  @IsOptional()
   @Type(() => Number)
   @IsInt()
   @Min(1)
-  page: number;
+  page: number = 1;
 
+  @IsOptional()
   @Type(() => Number)
   @IsInt()
   @Min(1)
-  limit: number;
-
-  // Optional: you can add `search` or `sortBy` here later
+  @Max(100)
+  limit: number = 10;
 }

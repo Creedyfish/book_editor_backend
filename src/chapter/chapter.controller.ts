@@ -12,74 +12,117 @@ import {
   Request,
   HttpCode,
   HttpStatus,
+  ParseIntPipe,
 } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import { ChapterService } from './chapter.service';
 import { CreateChapterDto } from './dto/create-chapter.dto';
 import { UpdateChapterDto } from './dto/update-chapter.dto';
 import { ChapterQueryDto } from './dto/query-chapter.dto';
-import { OptionalJwtAuthGuard } from 'src/auth/optional.strategy';
-@Controller('books/:bookId/chapters')
-export class ChapterController {
-  constructor(private readonly chaptersService: ChapterService) {}
+
+// chapters.controller.ts
+
+@Controller('books/:slug/chapters')
+export class PublicChapterController {
+  constructor(private readonly chapterService: ChapterService) {}
+
+  @Get()
+  findAll(
+    @Param('slug') slug: string,
+    @Query() query: ChapterQueryDto,
+    @Request() req: any,
+  ) {
+    const userId = req.user?.id;
+    return this.chapterService.findAllBySlug(slug, query, userId);
+  }
+
+  @Get(':chapterId')
+  findOne(
+    @Param('slug') slug: string,
+    @Param('chapterId') chapterId: string,
+    @Request() req: any,
+  ) {
+    const userId = req.user?.id;
+    return this.chapterService.findOneBySlug(slug, chapterId, userId);
+  }
+
+  @Get('order/:order')
+  findByOrder(
+    @Param('slug') slug: string,
+    @Param('order', ParseIntPipe) order: number,
+    @Request() req: any,
+  ) {
+    const userId = req.user?.id;
+    return this.chapterService.findOneBySlugAndOrder(slug, order, userId);
+  }
+}
+
+@Controller('dashboard/books/:bookId/chapters')
+@UseGuards(AuthGuard('jwt'))
+export class DashboardChapterController {
+  constructor(private readonly chapterService: ChapterService) {}
+
+  // const req.user = { id: '5302be7d-1b9e-43c0-a9cc-214cc9fa0e20' };
 
   @Post()
-  @UseGuards(AuthGuard('jwt'))
-  async create(
+  create(
     @Param('bookId') bookId: string,
-    @Body() createChapterDto: CreateChapterDto,
+    @Body() dto: CreateChapterDto,
     @Request() req: any,
   ) {
-    return this.chaptersService.create(bookId, createChapterDto, req.user.id);
+    // const req = {
+    //   user: {
+    //     id: '5302be7d-1b9e-43c0-a9cc-214cc9fa0e20',
+    //   },
+    // };
+    return this.chapterService.create(bookId, dto, req.user.id);
   }
 
-  @Get(':id')
-  @UseGuards(AuthGuard('jwt'))
-  async findOne(
+  @Get()
+  findAll(
     @Param('bookId') bookId: string,
-    @Param('id') id: string,
+    @Query() query: ChapterQueryDto,
     @Request() req: any,
   ) {
-    // Extract user ID if authenticated, but don't require authentication
-    const userId = req.user?.id;
-    return this.chaptersService.findOne(bookId, id, userId);
+    return this.chapterService.findAll(bookId, query, req.user.id);
   }
 
-  @Patch(':id')
-  @UseGuards(AuthGuard('jwt'))
-  async update(
+  @Get(':chapterId')
+  findOne(
     @Param('bookId') bookId: string,
-    @Param('id') id: string,
-    @Body() updateChapterDto: UpdateChapterDto,
+    @Param('chapterId') chapterId: string,
     @Request() req: any,
   ) {
-    return this.chaptersService.update(
-      bookId,
-      id,
-      updateChapterDto,
-      req.user.id,
-    );
+    return this.chapterService.findOne(bookId, chapterId, req.user.id);
   }
 
-  @Delete(':id')
-  @UseGuards(AuthGuard('jwt'))
+  @Patch(':chapterId')
+  update(
+    @Param('bookId') bookId: string,
+    @Param('chapterId') chapterId: string,
+    @Body() dto: UpdateChapterDto,
+    @Request() req: any,
+  ) {
+    return this.chapterService.update(bookId, chapterId, dto, req.user.id);
+  }
+
+  @Delete(':chapterId')
   @HttpCode(HttpStatus.NO_CONTENT)
-  async remove(
+  remove(
     @Param('bookId') bookId: string,
-    @Param('id') id: string,
+    @Param('chapterId') chapterId: string,
     @Request() req: any,
   ) {
-    await this.chaptersService.remove(bookId, id, req.user.id);
+    return this.chapterService.remove(bookId, chapterId, req.user.id);
   }
 
   @Post('reorder')
-  @UseGuards(AuthGuard('jwt'))
-  async reorderChapters(
+  reorder(
     @Param('bookId') bookId: string,
     @Body() body: { chapters: { id: string; order: number }[] },
     @Request() req: any,
   ) {
-    return this.chaptersService.reorderChapters(
+    return this.chapterService.reorderChapters(
       bookId,
       body.chapters,
       req.user.id,

@@ -10,6 +10,7 @@ import { CreateBookDto } from './dto/create-book.dto';
 import { UpdateBookDto } from './dto/update-book.dto';
 import { BookProgress } from 'generated/prisma';
 import slugify from 'slugify';
+
 @Injectable()
 export class BookService {
   constructor(private readonly databaseService: DatabaseService) {}
@@ -119,7 +120,7 @@ export class BookService {
     };
   }
 
-  async findOne(id: string, userId: string, page = 1, limit = 10) {
+  async findOne(id: string, userId: string) {
     const book = await this.databaseService.book.findUnique({
       where: { id },
       include: { tags: { include: { tag: true } } },
@@ -133,37 +134,12 @@ export class BookService {
       throw new ForbiddenException('Book not found');
     }
 
-    // Paginated chapters
-    const [chapters, totalChapters] = await this.databaseService.$transaction([
-      this.databaseService.chapter.findMany({
-        where: { bookId: id },
-        orderBy: { order: 'asc' },
-        skip: (page - 1) * limit,
-        take: limit,
-        select: {
-          id: true,
-          title: true,
-          order: true,
-          // exclude heavy content if not needed
-          // content: false,
-        },
-      }),
-      this.databaseService.chapter.count({
-        where: { bookId: id },
-      }),
-    ]);
-
     return {
       ...book,
       tags: book.tags.map((bt) => bt.tag.name),
-      chapters: {
-        data: chapters,
-        total: totalChapters,
-        page,
-        limit,
-      },
     };
   }
+
   async update(id: string, dto: UpdateBookDto) {
     const { tags = [], ...bookData } = dto;
 
@@ -183,7 +159,7 @@ export class BookService {
       }
     }
 
-    // FIXED: Only process tags if they are actually provided in the DTO
+    // Only process tags if they are actually provided in the DTO
     if (tags.length > 0) {
       const existingTags = await this.databaseService.tag.findMany({
         where: { name: { in: tags } },
@@ -207,7 +183,7 @@ export class BookService {
             ...bookData,
             tags: {
               create: existingTags.map((tag) => ({
-                tagId: tag.id, // FIXED: Use correct syntax
+                tagId: tag.id,
               })),
             },
           },
@@ -223,7 +199,7 @@ export class BookService {
 
       return updatedBook;
     } else {
-      // FIXED: If no tags provided, just update the book data without touching tags
+      // If no tags provided, just update the book data without touching tags
       const updatedBook = await this.databaseService.book.update({
         where: { id },
         data: bookData,
@@ -248,8 +224,7 @@ export class BookService {
   // 🌍 PUBLIC METHODS (Readers)
   // --------------------------------------
 
-  async getPublicBookBySlug(slug: string, page = 1, limit = 10) {
-    // 1. Fetch book metadata (excluding chapters)
+  async getPublicBookBySlug(slug: string) {
     const book = await this.databaseService.book.findFirst({
       where: {
         slug,
@@ -263,6 +238,8 @@ export class BookService {
         slug: true,
         description: true,
         progress: true,
+        coverImage: true,
+        bannerImage: true,
         updatedAt: true,
         tags: {
           select: {
@@ -277,103 +254,26 @@ export class BookService {
         user: {
           select: { username: true },
         },
+        _count: {
+          select: { chapters: true },
+        },
       },
     });
 
     if (!book) return null;
 
-    // 2. Fetch paginated chapters
-    const [chapters, totalChapters] = await this.databaseService.$transaction([
-      this.databaseService.chapter.findMany({
-        where: { bookId: book.id },
-        orderBy: { order: 'asc' },
-        skip: (page - 1) * limit,
-        take: limit,
-        select: {
-          title: true,
-          description: true,
-          order: true,
-          wordCount: true,
-          createdAt: true,
-          updatedAt: true,
-        },
-      }),
-      this.databaseService.chapter.count({
-        where: { bookId: book.id },
-      }),
-    ]);
-
-    // 3. Transform and return result
     return {
+      id: book.id,
       title: book.title,
       slug: book.slug,
       description: book.description,
       progress: book.progress,
+      coverImage: book.coverImage,
+      bannerImage: book.bannerImage,
       updatedAt: book.updatedAt.toISOString(),
       authorName: book.user.username,
       tags: book.tags.map((bt) => bt.tag.name),
-      chapters,
-      pagination: {
-        page,
-        limit,
-        total: totalChapters,
-        totalPages: Math.ceil(totalChapters / limit),
-      },
-    };
-  }
-
-  async getPublicBookChapterByOrder(slug: string, order: number) {
-    // 1. Find the book (only PUBLIC/PUBLISHED)
-    const book = await this.databaseService.book.findFirst({
-      where: {
-        slug,
-        status: {
-          in: ['PUBLIC', 'PUBLISHED'],
-        },
-      },
-      select: {
-        id: true,
-        title: true,
-        slug: true,
-        user: {
-          select: { username: true },
-        },
-      },
-    });
-
-    if (!book) return null;
-
-    // 2. Get the specific chapter by `order`
-    const chapter = await this.databaseService.chapter.findFirst({
-      where: {
-        bookId: book.id,
-        order,
-      },
-      select: {
-        title: true,
-        description: true,
-        content: true,
-        order: true,
-        wordCount: true,
-        createdAt: true,
-        updatedAt: true,
-      },
-    });
-
-    if (!chapter) return null;
-
-    // 3. Return combined data
-    return {
-      book: {
-        slug: book.slug,
-        title: book.title,
-        authorName: book.user.username,
-      },
-      chapter: {
-        ...chapter,
-        createdAt: chapter.createdAt.toISOString(),
-        updatedAt: chapter.updatedAt.toISOString(),
-      },
+      chapterCount: book._count.chapters,
     };
   }
 
@@ -435,8 +335,8 @@ export class BookService {
 
   async browse(query: {
     search?: string;
-    tags?: string[]; // <-- updated
-    excludeTags?: string[]; // <-- new
+    tags?: string[];
+    excludeTags?: string[];
     progress?: BookProgress;
     page?: number;
     limit?: number;
@@ -461,7 +361,7 @@ export class BookService {
       where.progress = progress;
     }
 
-    // ✅ Include books that have ANY of the specified tags
+    // Include books that have ANY of the specified tags
     if (tags.length > 0) {
       where.tags = {
         some: {
@@ -472,7 +372,7 @@ export class BookService {
       };
     }
 
-    // ❌ Exclude books that have ANY of the excluded tags
+    // Exclude books that have ANY of the excluded tags
     if (excludeTags.length > 0) {
       where.AND = where.AND || [];
       where.AND.push({
