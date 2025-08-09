@@ -19,4 +19,8 @@ export class CreateChapterDto {
   @IsObject()
   @IsNotEmpty()
   content: any; // JSON content
+
+  @IsNumber()
+  @IsOptional()
+  wordCount?: number;
 }

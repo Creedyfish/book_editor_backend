@@ -61,7 +61,9 @@ export class ChapterService {
       const nextOrder = lastChapter ? lastChapter.order + 1 : 1;
 
       // Step 4: Compute word count if needed
-      const wordCount = this.calculateWordCount(createChapterDto.content);
+      const wordCount = createChapterDto.wordCount
+        ? createChapterDto.wordCount
+        : this.calculateWordCount(createChapterDto.content);
 
       // Step 5: Create chapter with computed order
       return tx.chapter.create({
@@ -112,7 +114,7 @@ export class ChapterService {
 
     const where = { bookId };
 
-    const [chapters, total] = await Promise.all([
+    const [chapters, total, totalWordsAgg] = await Promise.all([
       this.databaseService.chapter.findMany({
         where,
         orderBy: { order: 'asc' },
@@ -132,6 +134,10 @@ export class ChapterService {
         },
       }),
       this.databaseService.chapter.count({ where }),
+      this.databaseService.chapter.aggregate({
+        where,
+        _sum: { wordCount: true },
+      }),
     ]);
 
     return {
@@ -141,6 +147,7 @@ export class ChapterService {
         limit,
         total,
         totalPages: Math.ceil(total / limit),
+        totalWords: totalWordsAgg._sum.wordCount ?? 0,
       },
     };
   }

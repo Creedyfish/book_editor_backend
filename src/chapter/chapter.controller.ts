@@ -107,7 +107,6 @@ export class DashboardChapterController {
   }
 
   @Delete(':chapterId')
-  @HttpCode(HttpStatus.NO_CONTENT)
   remove(
     @Param('bookId') bookId: string,
     @Param('chapterId') chapterId: string,

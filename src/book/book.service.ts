@@ -87,7 +87,20 @@ export class BookService {
     const [books, total] = await this.databaseService.$transaction([
       this.databaseService.book.findMany({
         where: { userId },
-        include: { tags: { include: { tag: true } } },
+        select: {
+          id: true,
+          slug: true,
+          title: true,
+          description: true,
+          status: true,
+          progress: true,
+          coverImage: true,
+          bannerImage: true,
+          createdAt: true,
+          updatedAt: true,
+          tags: { select: { tag: { select: { name: true } } } },
+          _count: { select: { chapters: true } },
+        },
         orderBy: { createdAt: 'desc' },
         skip,
         take: limit,
@@ -106,7 +119,8 @@ export class BookService {
       bannerImage: book.bannerImage,
       createdAt: book.createdAt,
       updatedAt: book.updatedAt,
-      tags: book.tags.map((bt) => bt.tag.name),
+      tags: (book.tags || []).map((bt) => bt.tag.name),
+      chaptersCount: book._count?.chapters ?? 0, // <-- use this
     }));
 
     return {
@@ -233,7 +247,6 @@ export class BookService {
         },
       },
       select: {
-        id: true,
         title: true,
         slug: true,
         description: true,
@@ -263,7 +276,6 @@ export class BookService {
     if (!book) return null;
 
     return {
-      id: book.id,
       title: book.title,
       slug: book.slug,
       description: book.description,
