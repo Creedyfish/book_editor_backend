@@ -27,8 +27,16 @@ export class BookService {
       select: { username: true },
     });
 
+    const slug = slugify(bookData.title, {
+      lower: true,
+      strict: true,
+      trim: true,
+    });
+
     const isUnique = await this.databaseService.book.findFirst({
-      where: { title: bookData.title },
+      where: {
+        OR: [{ title: bookData.title }, { slug }],
+      },
     });
 
     if (isUnique) {
@@ -51,12 +59,6 @@ export class BookService {
     if (notFoundTags.length > 0) {
       throw new Error(`Tags not found: ${notFoundTags.join(', ')}`);
     }
-
-    const slug = slugify(bookData.title, {
-      lower: true,
-      strict: true,
-      trim: true,
-    });
 
     const book = await this.databaseService.book.create({
       data: {
@@ -120,7 +122,7 @@ export class BookService {
       createdAt: book.createdAt,
       updatedAt: book.updatedAt,
       tags: (book.tags || []).map((bt) => bt.tag.name),
-      chaptersCount: book._count?.chapters ?? 0, // <-- use this
+      chapterCount: book._count?.chapters ?? 0, // <-- use this
     }));
 
     return {
@@ -137,7 +139,11 @@ export class BookService {
   async findOne(id: string, userId: string) {
     const book = await this.databaseService.book.findUnique({
       where: { id },
-      include: { tags: { include: { tag: true } } },
+      include: {
+        tags: { include: { tag: true } },
+        user: { select: { username: true } }, // add username
+        _count: { select: { chapters: true } }, // add chapter count
+      },
     });
 
     if (!book) throw new NotFoundException('Book not found');
@@ -151,6 +157,7 @@ export class BookService {
     return {
       ...book,
       tags: book.tags.map((bt) => bt.tag.name),
+      chapterCount: book._count.chapters, // flatten if needed
     };
   }
 
@@ -401,7 +408,11 @@ export class BookService {
     const [books, total] = await this.databaseService.$transaction([
       this.databaseService.book.findMany({
         where,
-        include: { tags: { include: { tag: true } } },
+        include: {
+          tags: { include: { tag: true } },
+          user: { select: { username: true } },
+          _count: { select: { chapters: true } },
+        },
         orderBy: { createdAt: 'desc' },
         skip,
         take: limit,
@@ -411,7 +422,6 @@ export class BookService {
 
     return {
       data: books.map((book) => ({
-        id: book.id,
         title: book.title,
         description: book.description,
         progress: book.progress,
@@ -419,7 +429,10 @@ export class BookService {
         bannerImage: book.bannerImage,
         createdAt: book.createdAt,
         updatedAt: book.updatedAt,
+        authorName: book.user.username,
         tags: book.tags.map((bt) => bt.tag.name),
+        slug: book.slug,
+        chapterCount: book._count?.chapters ?? 0,
       })),
       meta: {
         total,

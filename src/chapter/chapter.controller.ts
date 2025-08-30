@@ -127,6 +127,19 @@ export class DashboardChapterController {
       req.user.id,
     );
   }
+
+  @Get('order/:order')
+  findByOrder(
+    @Param('bookId') bookId: string,
+    @Param('order', ParseIntPipe) order: number,
+    @Request() req: any,
+  ) {
+    return this.chapterService.findOneByBookIdAndOrder(
+      bookId,
+      order,
+      req.user.id,
+    );
+  }
 }
 
 // Alternative controller for authenticated-only access

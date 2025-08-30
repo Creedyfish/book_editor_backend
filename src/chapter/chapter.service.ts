@@ -371,6 +371,26 @@ export class ChapterService {
     return 0;
   }
 
+  async findOneByBookIdAndOrder(
+    bookId: string,
+    order: number,
+    userId?: string,
+  ) {
+    const chapter = await this.databaseService.chapter.findFirst({
+      where: {
+        bookId: bookId,
+        order,
+        ...(userId ? { book: { userId } } : {}), // verify ownership here
+      },
+      include: {
+        _count: { select: { comments: true } },
+      },
+    });
+
+    if (!chapter) throw new NotFoundException('Chapter not found');
+    return chapter;
+  }
+
   // public
 
   async findAllBySlug(
