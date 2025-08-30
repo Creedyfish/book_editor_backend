@@ -25,6 +25,7 @@ import { AuthGuard } from '@nestjs/passport';
 import { BookProgress } from 'generated/prisma';
 import { NotFoundException } from '@nestjs/common';
 import slugify from 'slugify';
+
 @Controller('books')
 export class BookController {
   private readonly DEFAULT_COVER_URL = process.env.DEFAULT_BOOK_COVER_URL;
@@ -39,7 +40,6 @@ export class BookController {
   // 🌍 PUBLIC ROUTES (Readers)
   // -----------------------------
 
-  // Static first
   @Get('browse')
   async browse(
     @Query('search') search?: string,
@@ -72,8 +72,8 @@ export class BookController {
     return this.bookService.findAllVisibleByUser(username, page, limit);
   }
 
-  // Slug before ID to avoid conflict
-  @Get('slug/:slug')
+  // Get public book by slug
+  @Get(':slug')
   async getPublicBook(@Param('slug') slug: string) {
     const book = await this.bookService.getPublicBookBySlug(slug);
     if (!book) {
@@ -143,59 +143,11 @@ export class BookController {
     return this.bookService.findAll(req.user.id, page, limit);
   }
 
-  @UseGuards(AuthGuard('jwt'))
   @Get('id/:id')
+  @UseGuards(AuthGuard('jwt'))
   async findOne(@Param('id') id: string, @Req() req) {
     return this.bookService.findOne(id, req.user.id);
   }
-
-  // @UseGuards(AuthGuard('jwt'))
-  // @Put(':id')
-  // @UseInterceptors(
-  //   FileFieldsInterceptor([
-  //     { name: 'cover', maxCount: 1 },
-  //     { name: 'banner', maxCount: 1 },
-  //   ]),
-  // )
-  // async update(
-  //   @Param('id') id: string,
-  //   @Body() dto: UpdateBookDto,
-  //   @Req() req,
-  //   @UploadedFiles()
-  //   files: { cover?: Express.Multer.File[]; banner?: Express.Multer.File[] },
-  // ) {
-  //   const userId = req.user.id;
-  //   const username = req.user.username;
-  //   const title = dto.title as string;
-
-  //   const existingBook = await this.bookService.findOne(id, userId);
-  //   if (existingBook.userId !== userId) {
-  //     throw new BadRequestException('You can only update your own books');
-  //   }
-
-  //   if (files.cover || files.banner) {
-  //     const uploadResults = await this.uploadService.updateBookAssets(
-  //       username,
-  //       title,
-  //       existingBook.coverImage ?? undefined,
-  //       existingBook.bannerImage ?? undefined,
-  //       files.cover?.[0],
-  //       files.banner?.[0],
-  //     );
-
-  //     const updateData = {
-  //       ...dto,
-  //       ...(uploadResults.coverUrl && { coverImage: uploadResults.coverUrl }),
-  //       ...(uploadResults.bannerUrl && {
-  //         bannerImage: uploadResults.bannerUrl,
-  //       }),
-  //     };
-
-  //     return this.bookService.update(id, updateData);
-  //   }
-
-  //   return this.bookService.update(id, dto);
-  // }
 
   @UseGuards(AuthGuard('jwt'))
   @Put(':id')

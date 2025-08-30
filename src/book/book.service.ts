@@ -10,6 +10,7 @@ import { CreateBookDto } from './dto/create-book.dto';
 import { UpdateBookDto } from './dto/update-book.dto';
 import { BookProgress } from 'generated/prisma';
 import slugify from 'slugify';
+
 @Injectable()
 export class BookService {
   constructor(private readonly databaseService: DatabaseService) {}
@@ -26,8 +27,16 @@ export class BookService {
       select: { username: true },
     });
 
+    const slug = slugify(bookData.title, {
+      lower: true,
+      strict: true,
+      trim: true,
+    });
+
     const isUnique = await this.databaseService.book.findFirst({
-      where: { title: bookData.title },
+      where: {
+        OR: [{ title: bookData.title }, { slug }],
+      },
     });
 
     if (isUnique) {
@@ -50,12 +59,6 @@ export class BookService {
     if (notFoundTags.length > 0) {
       throw new Error(`Tags not found: ${notFoundTags.join(', ')}`);
     }
-
-    const slug = slugify(bookData.title, {
-      lower: true,
-      strict: true,
-      trim: true,
-    });
 
     const book = await this.databaseService.book.create({
       data: {
@@ -86,7 +89,20 @@ export class BookService {
     const [books, total] = await this.databaseService.$transaction([
       this.databaseService.book.findMany({
         where: { userId },
-        include: { tags: { include: { tag: true } } },
+        select: {
+          id: true,
+          slug: true,
+          title: true,
+          description: true,
+          status: true,
+          progress: true,
+          coverImage: true,
+          bannerImage: true,
+          createdAt: true,
+          updatedAt: true,
+          tags: { select: { tag: { select: { name: true } } } },
+          _count: { select: { chapters: true } },
+        },
         orderBy: { createdAt: 'desc' },
         skip,
         take: limit,
@@ -105,7 +121,8 @@ export class BookService {
       bannerImage: book.bannerImage,
       createdAt: book.createdAt,
       updatedAt: book.updatedAt,
-      tags: book.tags.map((bt) => bt.tag.name),
+      tags: (book.tags || []).map((bt) => bt.tag.name),
+      chapterCount: book._count?.chapters ?? 0, // <-- use this
     }));
 
     return {
@@ -122,7 +139,11 @@ export class BookService {
   async findOne(id: string, userId: string) {
     const book = await this.databaseService.book.findUnique({
       where: { id },
-      include: { tags: { include: { tag: true } } },
+      include: {
+        tags: { include: { tag: true } },
+        user: { select: { username: true } }, // add username
+        _count: { select: { chapters: true } }, // add chapter count
+      },
     });
 
     if (!book) throw new NotFoundException('Book not found');
@@ -136,6 +157,7 @@ export class BookService {
     return {
       ...book,
       tags: book.tags.map((bt) => bt.tag.name),
+      chapterCount: book._count.chapters, // flatten if needed
     };
   }
 
@@ -158,7 +180,7 @@ export class BookService {
       }
     }
 
-    // FIXED: Only process tags if they are actually provided in the DTO
+    // Only process tags if they are actually provided in the DTO
     if (tags.length > 0) {
       const existingTags = await this.databaseService.tag.findMany({
         where: { name: { in: tags } },
@@ -182,7 +204,7 @@ export class BookService {
             ...bookData,
             tags: {
               create: existingTags.map((tag) => ({
-                tagId: tag.id, // FIXED: Use correct syntax
+                tagId: tag.id,
               })),
             },
           },
@@ -198,7 +220,7 @@ export class BookService {
 
       return updatedBook;
     } else {
-      // FIXED: If no tags provided, just update the book data without touching tags
+      // If no tags provided, just update the book data without touching tags
       const updatedBook = await this.databaseService.book.update({
         where: { id },
         data: bookData,
@@ -232,14 +254,13 @@ export class BookService {
         },
       },
       select: {
-        id: true,
         title: true,
         slug: true,
         description: true,
         progress: true,
-        status: true,
+        coverImage: true,
+        bannerImage: true,
         updatedAt: true,
-
         tags: {
           select: {
             tag: {
@@ -253,23 +274,26 @@ export class BookService {
         user: {
           select: { username: true },
         },
+        _count: {
+          select: { chapters: true },
+        },
       },
     });
 
     if (!book) return null;
 
-    const transformed = {
+    return {
       title: book.title,
       slug: book.slug,
       description: book.description,
       progress: book.progress,
-      status: book.status,
+      coverImage: book.coverImage,
+      bannerImage: book.bannerImage,
       updatedAt: book.updatedAt.toISOString(),
       authorName: book.user.username,
-      tags: book.tags.map((t) => t.tag),
+      tags: book.tags.map((bt) => bt.tag.name),
+      chapterCount: book._count.chapters,
     };
-
-    return transformed;
   }
 
   async findAllVisibleByUser(username: string, page = 1, limit = 10) {
@@ -330,8 +354,8 @@ export class BookService {
 
   async browse(query: {
     search?: string;
-    tags?: string[]; // <-- updated
-    excludeTags?: string[]; // <-- new
+    tags?: string[];
+    excludeTags?: string[];
     progress?: BookProgress;
     page?: number;
     limit?: number;
@@ -356,7 +380,7 @@ export class BookService {
       where.progress = progress;
     }
 
-    // ✅ Include books that have ANY of the specified tags
+    // Include books that have ANY of the specified tags
     if (tags.length > 0) {
       where.tags = {
         some: {
@@ -367,7 +391,7 @@ export class BookService {
       };
     }
 
-    // ❌ Exclude books that have ANY of the excluded tags
+    // Exclude books that have ANY of the excluded tags
     if (excludeTags.length > 0) {
       where.AND = where.AND || [];
       where.AND.push({
@@ -384,7 +408,11 @@ export class BookService {
     const [books, total] = await this.databaseService.$transaction([
       this.databaseService.book.findMany({
         where,
-        include: { tags: { include: { tag: true } } },
+        include: {
+          tags: { include: { tag: true } },
+          user: { select: { username: true } },
+          _count: { select: { chapters: true } },
+        },
         orderBy: { createdAt: 'desc' },
         skip,
         take: limit,
@@ -394,7 +422,6 @@ export class BookService {
 
     return {
       data: books.map((book) => ({
-        id: book.id,
         title: book.title,
         description: book.description,
         progress: book.progress,
@@ -402,7 +429,10 @@ export class BookService {
         bannerImage: book.bannerImage,
         createdAt: book.createdAt,
         updatedAt: book.updatedAt,
+        authorName: book.user.username,
         tags: book.tags.map((bt) => bt.tag.name),
+        slug: book.slug,
+        chapterCount: book._count?.chapters ?? 0,
       })),
       meta: {
         total,

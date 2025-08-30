@@ -210,9 +210,27 @@ export class AuthService {
       .$transaction(async (tx) => {
         const user = await tx.user.findUnique({
           where: { email: email },
+          include: { accounts: true }, // Include accounts to check provider
         });
 
         if (!user) throw new NotFoundException('User not found');
+
+        // Check if user has a Google account (OAuth) and no password
+        const hasGoogleAccount = user.accounts.some(
+          (acc) => acc.provider === 'google',
+        );
+
+        if (hasGoogleAccount && !user.password) {
+          throw new ForbiddenException(
+            'Password reset is not available for Google accounts. Please sign in with Google.',
+          );
+        }
+
+        // Optional: Also block if user only has Google account even with a password set
+        // Uncomment the lines below if you want stricter behavior
+        // if (hasGoogleAccount) {
+        //   throw new ForbiddenException('This account uses Google sign-in. Password reset is not available.');
+        // }
 
         const code = this.generateCode();
         const hashedCode = await bcrypt.hash(code, 10);
