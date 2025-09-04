@@ -736,37 +736,40 @@ export class BookService {
       orderBy: [{ ratings: 'desc' }, { views: 'desc' }, { updatedAt: 'desc' }],
       take: limit,
       select: {
+        id: true,
         title: true,
         slug: true,
         description: true,
+        status: true,
         progress: true,
         coverImage: true,
         bannerImage: true,
         views: true,
         ratings: true,
+        createdAt: true,
         updatedAt: true,
-        user: {
-          select: { username: true },
-        },
-        tags: {
-          select: {
-            tag: {
-              select: {
-                name: true,
-              },
-            },
-          },
-        },
-        _count: {
-          select: { chapters: true },
-        },
+        user: { select: { username: true } },
+        tags: { select: { tag: { select: { name: true } } } },
+        _count: { select: { chapters: true } },
       },
     });
 
-    // transform nested tags into string array
     return books.map((book) => ({
-      ...book,
+      id: book.id,
+      title: book.title,
+      description: book.description,
+      status: book.status,
+      progress: book.progress,
+      slug: book.slug,
+      authorName: book.user.username,
+      coverImage: book.coverImage,
+      bannerImage: book.bannerImage,
+      views: book.views,
+      ratings: book.ratings,
+      createdAt: book.createdAt,
+      updatedAt: book.updatedAt,
       tags: book.tags.map((bt) => bt.tag.name),
+      chapterCount: book._count.chapters,
     }));
   }
 
@@ -787,31 +790,36 @@ export class BookService {
         title: true,
         slug: true,
         description: true,
+        status: true,
         progress: true,
         coverImage: true,
         bannerImage: true,
         views: true,
         ratings: true,
+        createdAt: true,
         updatedAt: true,
-        user: {
-          select: { username: true },
-        },
-        tags: {
-          select: {
-            tag: {
-              select: { name: true },
-            },
-          },
-        },
-        _count: {
-          select: { chapters: true },
-        },
+        user: { select: { username: true } },
+        tags: { select: { tag: { select: { name: true } } } },
+        _count: { select: { chapters: true } },
       },
     });
 
     return books.map((book) => ({
-      ...book,
+      id: book.id,
+      title: book.title,
+      description: book.description,
+      status: book.status,
+      progress: book.progress,
+      slug: book.slug,
+      authorName: book.user.username,
+      coverImage: book.coverImage,
+      bannerImage: book.bannerImage,
+      views: book.views,
+      ratings: book.ratings,
+      createdAt: book.createdAt,
+      updatedAt: book.updatedAt,
       tags: book.tags.map((bt) => bt.tag.name),
+      chapterCount: book._count.chapters,
     }));
   }
 
@@ -824,42 +832,46 @@ export class BookService {
         status: {
           in: ['PUBLIC', 'PUBLISHED'],
         },
-        createdAt: {
-          gte: oneMonthAgo, // only books created within last month
-        },
+        // If you want only books created in the last month, uncomment:
+        // createdAt: { gte: oneMonthAgo },
       },
       orderBy: [{ views: 'desc' }, { ratings: 'desc' }, { createdAt: 'desc' }],
       take: limit,
       select: {
-        id: true,
         title: true,
-        slug: true,
         description: true,
+        status: true,
         progress: true,
+        slug: true,
         coverImage: true,
         bannerImage: true,
         views: true,
         ratings: true,
         createdAt: true,
-        user: {
-          select: { username: true },
-        },
+        updatedAt: true,
+        user: { select: { username: true } },
         tags: {
-          select: {
-            tag: {
-              select: { name: true },
-            },
-          },
+          select: { tag: { select: { name: true } } },
         },
-        _count: {
-          select: { chapters: true },
-        },
+        _count: { select: { chapters: true } },
       },
     });
 
     return books.map((book) => ({
-      ...book,
+      title: book.title,
+      description: book.description,
+      status: book.status,
+      progress: book.progress,
+      slug: book.slug,
+      authorName: book.user.username, // flatten user -> authorName
+      coverImage: book.coverImage,
+      bannerImage: book.bannerImage,
+      views: book.views,
+      ratings: book.ratings,
+      createdAt: book.createdAt,
+      updatedAt: book.updatedAt,
       tags: book.tags.map((bt) => bt.tag.name),
+      chapterCount: book._count.chapters, // flatten _count
     }));
   }
 }

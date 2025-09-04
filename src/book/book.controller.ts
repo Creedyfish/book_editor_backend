@@ -40,17 +40,25 @@ export class BookController {
   // -----------------------------
 
   @Get('featured')
-  async getFeaturedBooks(@Query('limit') limit = 5) {
+  async getFeaturedBooks(
+    @Query('limit', new ParseIntPipe({ optional: true })) limit = 5,
+  ) {
     return this.bookService.getFeaturedBooks(Number(limit));
   }
 
   @Get('featured-popular')
-  async getPopularBooks(@Query('limit') limit = 5) {
+  async getPopularBooks(
+    @Query('limit', new ParseIntPipe({ optional: true })) limit = 5,
+  ) {
+    const numericLimit = Number(limit);
+
     return this.bookService.getFeaturedPopularBooks(Number(limit));
   }
 
   @Get('featured-rising-stars')
-  async getRisingStars(@Query('limit') limit = 5) {
+  async getRisingStars(
+    @Query('limit', new ParseIntPipe({ optional: true })) limit = 5,
+  ) {
     return this.bookService.getFeaturedRisingStars(Number(limit));
   }
 
