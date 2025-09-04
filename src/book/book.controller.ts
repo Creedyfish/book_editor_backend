@@ -4,7 +4,6 @@ import {
   Get,
   Post,
   Body,
-  Patch,
   Param,
   Delete,
   UseGuards,
@@ -39,6 +38,21 @@ export class BookController {
   // -----------------------------
   // 🌍 PUBLIC ROUTES (Readers)
   // -----------------------------
+
+  @Get('featured')
+  async getFeaturedBooks(@Query('limit') limit = 5) {
+    return this.bookService.getFeaturedBooks(Number(limit));
+  }
+
+  @Get('featured-popular')
+  async getPopularBooks(@Query('limit') limit = 5) {
+    return this.bookService.getFeaturedPopularBooks(Number(limit));
+  }
+
+  @Get('featured-rising-stars')
+  async getRisingStars(@Query('limit') limit = 5) {
+    return this.bookService.getFeaturedRisingStars(Number(limit));
+  }
 
   @Get('browse')
   async browse(
