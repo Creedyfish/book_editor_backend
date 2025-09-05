@@ -325,57 +325,6 @@ export class BookService {
   // 🌍 PUBLIC METHODS (Readers)
   // --------------------------------------
 
-  // async getPublicBookBySlug(slug: string) {
-  //   const book = await this.databaseService.book.findFirst({
-  //     where: {
-  //       slug,
-  //       status: {
-  //         in: ['PUBLIC', 'PUBLISHED'],
-  //       },
-  //     },
-  //     select: {
-  //       title: true,
-  //       slug: true,
-  //       description: true,
-  //       progress: true,
-  //       coverImage: true,
-  //       bannerImage: true,
-  //       updatedAt: true,
-  //       tags: {
-  //         select: {
-  //           tag: {
-  //             select: {
-  //               id: true,
-  //               name: true,
-  //             },
-  //           },
-  //         },
-  //       },
-  //       user: {
-  //         select: { username: true },
-  //       },
-  //       _count: {
-  //         select: { chapters: true },
-  //       },
-  //     },
-  //   });
-
-  //   if (!book) return null;
-
-  //   return {
-  //     title: book.title,
-  //     slug: book.slug,
-  //     description: book.description,
-  //     progress: book.progress,
-  //     coverImage: book.coverImage,
-  //     bannerImage: book.bannerImage,
-  //     updatedAt: book.updatedAt.toISOString(),
-  //     authorName: book.user.username,
-  //     tags: book.tags.map((bt) => bt.tag.name),
-  //     chapterCount: book._count.chapters,
-  //   };
-  // }
-
   async getPublicBookBySlug(slug: string) {
     const book = await this.databaseService.book.findFirst({
       where: {
@@ -431,61 +380,6 @@ export class BookService {
     };
   }
 
-  // async findAllVisibleByUser(username: string, page = 1, limit = 10) {
-  //   const skip = (page - 1) * limit;
-
-  //   const user = await this.databaseService.user.findUnique({
-  //     where: { username },
-  //     select: { id: true },
-  //   });
-
-  //   if (!user) throw new NotFoundException('User not found');
-
-  //   const [books, total] = await this.databaseService.$transaction([
-  //     this.databaseService.book.findMany({
-  //       where: {
-  //         userId: user.id,
-  //         status: { in: ['PUBLIC', 'PUBLISHED'] },
-  //       },
-  //       include: {
-  //         tags: {
-  //           include: {
-  //             tag: true,
-  //           },
-  //         },
-  //       },
-  //       orderBy: { createdAt: 'desc' },
-  //       skip,
-  //       take: limit,
-  //     }),
-  //     this.databaseService.book.count({
-  //       where: {
-  //         userId: user.id,
-  //         status: { in: ['PUBLIC', 'PUBLISHED'] },
-  //       },
-  //     }),
-  //   ]);
-
-  //   return {
-  //     data: books.map((book) => ({
-  //       id: book.id,
-  //       title: book.title,
-  //       description: book.description,
-  //       progress: book.progress,
-  //       coverImage: book.coverImage,
-  //       bannerImage: book.bannerImage,
-  //       createdAt: book.createdAt,
-  //       updatedAt: book.updatedAt,
-  //       tags: book.tags.map((bt) => bt.tag.name),
-  //     })),
-  //     meta: {
-  //       total,
-  //       page,
-  //       limit,
-  //       totalPages: Math.ceil(total / limit),
-  //     },
-  //   };
-  // }
   async findAllVisibleByUser(username: string, page = 1, limit = 10) {
     const skip = (page - 1) * limit;
 
@@ -502,12 +396,22 @@ export class BookService {
           userId: user.id,
           status: { in: ['PUBLIC', 'PUBLISHED'] },
         },
-        include: {
-          tags: {
-            include: {
-              tag: true,
-            },
-          },
+        select: {
+          id: true,
+          title: true,
+          slug: true,
+          description: true,
+          status: true,
+          progress: true,
+          coverImage: true,
+          bannerImage: true,
+          views: true,
+          ratings: true, // ✅ correct field
+          createdAt: true,
+          updatedAt: true,
+          user: { select: { username: true } },
+          tags: { select: { tag: { select: { name: true } } } },
+          _count: { select: { chapters: true } },
         },
         orderBy: { createdAt: 'desc' },
         skip,
@@ -523,16 +427,21 @@ export class BookService {
 
     return {
       data: books.map((book) => ({
+        id: book.id,
         title: book.title,
+        slug: book.slug,
         description: book.description,
+        status: book.status,
         progress: book.progress,
         coverImage: book.coverImage,
         bannerImage: book.bannerImage,
-        views: book.views, // Include views in response
-        ratings: book.ratings, // Include ratings in response
+        views: book.views,
+        ratings: book.ratings,
         createdAt: book.createdAt,
         updatedAt: book.updatedAt,
+        authorName: book.user.username,
         tags: book.tags.map((bt) => bt.tag.name),
+        chapterCount: book._count.chapters,
       })),
       meta: {
         total,
@@ -543,96 +452,6 @@ export class BookService {
     };
   }
 
-  // async browse(query: {
-  //   search?: string;
-  //   tags?: string[];
-  //   excludeTags?: string[];
-  //   progress?: BookProgress;
-  //   page?: number;
-  //   limit?: number;
-  // }) {
-  //   const {
-  //     search = '',
-  //     tags = [],
-  //     excludeTags = [],
-  //     progress,
-  //     page = 1,
-  //     limit = 10,
-  //   } = query;
-
-  //   const skip = (page - 1) * limit;
-
-  //   const where: any = {
-  //     status: { in: ['PUBLIC', 'PUBLISHED'] },
-  //     title: { contains: search, mode: 'insensitive' },
-  //   };
-
-  //   if (progress) {
-  //     where.progress = progress;
-  //   }
-
-  //   // Include books that have ANY of the specified tags
-  //   if (tags.length > 0) {
-  //     where.tags = {
-  //       some: {
-  //         tag: {
-  //           name: { in: tags },
-  //         },
-  //       },
-  //     };
-  //   }
-
-  //   // Exclude books that have ANY of the excluded tags
-  //   if (excludeTags.length > 0) {
-  //     where.AND = where.AND || [];
-  //     where.AND.push({
-  //       tags: {
-  //         none: {
-  //           tag: {
-  //             name: { in: excludeTags },
-  //           },
-  //         },
-  //       },
-  //     });
-  //   }
-
-  //   const [books, total] = await this.databaseService.$transaction([
-  //     this.databaseService.book.findMany({
-  //       where,
-  //       include: {
-  //         tags: { include: { tag: true } },
-  //         user: { select: { username: true } },
-  //         _count: { select: { chapters: true } },
-  //       },
-  //       orderBy: { createdAt: 'desc' },
-  //       skip,
-  //       take: limit,
-  //     }),
-  //     this.databaseService.book.count({ where }),
-  //   ]);
-
-  //   return {
-  //     data: books.map((book) => ({
-  //       title: book.title,
-  //       description: book.description,
-  //       progress: book.progress,
-  //       coverImage: book.coverImage,
-  //       bannerImage: book.bannerImage,
-  //       createdAt: book.createdAt,
-  //       updatedAt: book.updatedAt,
-  //       authorName: book.user.username,
-  //       tags: book.tags.map((bt) => bt.tag.name),
-  //       slug: book.slug,
-  //       chapterCount: book._count?.chapters ?? 0,
-  //     })),
-  //     meta: {
-  //       total,
-  //       page,
-  //       limit,
-  //       totalPages: Math.ceil(total / limit),
-  //     },
-  //   };
-  // }
   async browse(query: {
     search?: string;
     tags?: string[];
