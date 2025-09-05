@@ -12,6 +12,7 @@ import { S3Service } from './aws/s3.service';
 import { ConfigModule } from '@nestjs/config';
 import { UploadService } from './upload/upload.service';
 import { ChapterModule } from './chapter/chapter.module';
+import { ThrottlerModule } from '@nestjs/throttler';
 
 @Module({
   imports: [
@@ -24,6 +25,14 @@ import { ChapterModule } from './chapter/chapter.module';
       isGlobal: true,
     }),
     ChapterModule,
+    ThrottlerModule.forRoot({
+      throttlers: [
+        {
+          ttl: 60000,
+          limit: 10,
+        },
+      ],
+    }),
   ],
   controllers: [AppController],
   providers: [AppService, MailService, JwtService, S3Service, UploadService],
