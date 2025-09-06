@@ -5,6 +5,7 @@ import {
   UseGuards,
   Patch,
   Body,
+  Param,
 } from '@nestjs/common';
 import { UserService } from './user.service';
 import { AuthGuard } from '@nestjs/passport';
@@ -13,6 +14,19 @@ import { UpdateUsernameDto } from './dto/update-username.dto';
 @Controller('user')
 export class UserController {
   constructor(private readonly userService: UserService) {}
+
+  // ─────────────────────────────────────────────
+  // ▶ PUBLIC API
+  // ─────────────────────────────────────────────
+
+  @Get('author/:username')
+  async getPublicProfile(@Param('username') username: string) {
+    return this.userService.getPublicProfile(username);
+  }
+
+  // ─────────────────────────────────────────────
+  // ▶ PRIVATE API
+  // ─────────────────────────────────────────────
 
   @UseGuards(AuthGuard('jwt'))
   @Get('profile')

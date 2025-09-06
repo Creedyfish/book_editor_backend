@@ -41,13 +41,12 @@ export class AuthController {
     @Body() body: RegisterDto,
     @Res({ passthrough: true }) res: Response,
   ) {
-    console.log('registering');
     const verifyCloudfare = await this.authService.verifyTurnstileToken(
       body.token,
     );
 
     if (!verifyCloudfare) throw new UnauthorizedException('Please try again');
-    console.log('turnstile verified');
+
     const newUser = await this.authService.createUser(
       body.email,
       body.password,

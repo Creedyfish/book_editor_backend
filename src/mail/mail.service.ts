@@ -11,14 +11,14 @@ export class MailService {
   ) {
     const year = new Date().getFullYear();
     const logoUrl =
-      'https://res.cloudinary.com/dfq2nlkxn/image/upload/v1750980514/colibro_logo_mqkt4n.png';
+      'https://dv1i48yg0n78o.cloudfront.net/assets/logos/Scriblaheim-logo.png';
 
     const sharedHeader = `
     <div style="font-family: 'Segoe UI', sans-serif; background-color: #f4f4f4; padding: 30px;">
       <div style="max-width: 600px; margin: auto; background-color: #ffffff; border-radius: 10px; box-shadow: 0 6px 16px rgba(0, 0, 0, 0.08); padding: 40px;">
         <img
           src="${logoUrl}"
-          alt="Colibro Logo"
+          alt="Scriblaheim Logo"
           style="width: 100px; margin: 0 auto 30px; display: block;"
         />
   `;
@@ -26,7 +26,7 @@ export class MailService {
     const sharedFooter = `
         <hr style="margin: 40px 0; border: none; border-top: 1px solid #eee;" />
         <p style="text-align: center; color: #bbb; font-size: 13px;">
-          © ${year} Colibro — Helping Writers Succeed with AI.
+          © ${year} Scriblaheim — A Community for Writers and Readers.
         </p>
       </div>
     </div>
@@ -42,7 +42,7 @@ export class MailService {
             Verify Your Email Address
           </h2>
           <p style="color: #555; font-size: 16px; line-height: 1.6; text-align: center;">
-            Welcome to <strong style="color: #5B3DF4;">Colibro</strong> — your AI-powered assistant for writers. To get started, verify your email address using the code below:
+            Welcome to <strong style="color: #5B3DF4;">Scriblaheim</strong> — your new home for writing, publishing, and discovering novels. To get started, please confirm your email address with the code below:
           </p>
           <div style="margin: 30px 0; text-align: center;">
             <p style="font-size: 28px; font-weight: bold; letter-spacing: 2px; background-color: #f7f7f7; padding: 18px 24px; border-radius: 10px; display: inline-block; color: #333;">
@@ -50,7 +50,7 @@ export class MailService {
             </p>
           </div>
           <p style="color: #999; font-size: 14px; text-align: center;">
-            This code is valid for the next 15 minutes. If you didn’t request this, you can safely ignore this email.
+            This code is valid for the next 15 minutes. If you didn’t create an account, you can safely ignore this email.
           </p>
           ${sharedFooter}
         `,
@@ -65,7 +65,7 @@ export class MailService {
             Reset Your Password
           </h2>
           <p style="color: #555; font-size: 16px; line-height: 1.6; text-align: center;">
-            You requested to reset your password for <strong style="color: #5B3DF4;">Colibro</strong>. Use the code below to proceed:
+            You requested to reset your password for <strong style="color: #5B3DF4;">Scriblaheim</strong>. Use the code below to set up a new password and continue your journey in reading and writing:
           </p>
           <div style="margin: 30px 0; text-align: center;">
             <p style="font-size: 28px; font-weight: bold; letter-spacing: 2px; background-color: #f7f7f7; padding: 18px 24px; border-radius: 10px; display: inline-block; color: #333;">
@@ -73,7 +73,7 @@ export class MailService {
             </p>
           </div>
           <p style="color: #999; font-size: 14px; text-align: center;">
-            This code will expire in 15 minutes. If you didn’t request a password reset, you can ignore this email.
+            This code will expire in 15 minutes. If you didn’t request a password reset, you can safely ignore this email.
           </p>
           ${sharedFooter}
         `,
