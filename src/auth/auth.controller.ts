@@ -66,7 +66,7 @@ export class AuthController {
 
     res.cookie('email_verification_token', emailToken, {
       secure: process.env.NODE_ENV === 'production',
-      sameSite: 'strict',
+      sameSite: 'none',
       maxAge: 10 * 60 * 1000,
       path: '/',
     });
@@ -97,7 +97,7 @@ export class AuthController {
     res.cookie('refresh_token', tokens.refreshToken, {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
-      sameSite: 'strict',
+      sameSite: 'none',
       path: '/',
       maxAge: 7 * 24 * 60 * 60 * 1000,
     });
@@ -154,7 +154,7 @@ export class AuthController {
     res.cookie('refresh_token', tokens.refreshToken, {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
-      sameSite: 'strict',
+      sameSite: 'none',
       path: '/',
       maxAge: 7 * 24 * 60 * 60 * 1000,
     });
@@ -196,7 +196,7 @@ export class AuthController {
 
     res.cookie('email_verification_token', emailToken, {
       secure: process.env.NODE_ENV === 'production',
-      sameSite: 'strict',
+      sameSite: 'none',
       maxAge: 10 * 60 * 1000,
       path: '/',
     });
@@ -219,7 +219,7 @@ export class AuthController {
 
     res.cookie('email_verification_token', emailToken, {
       secure: process.env.NODE_ENV === 'production',
-      sameSite: 'strict',
+      sameSite: 'none',
       maxAge: 10 * 60 * 1000,
       path: '/',
     });
@@ -248,7 +248,7 @@ export class AuthController {
 
     res.cookie('reset_password_token', emailToken, {
       secure: process.env.NODE_ENV === 'production',
-      sameSite: 'strict',
+      sameSite: 'none',
       maxAge: 10 * 60 * 1000,
       path: '/',
     });
@@ -292,7 +292,7 @@ export class AuthController {
       res.clearCookie('refresh_token', {
         httpOnly: true,
         secure: process.env.NODE_ENV === 'production',
-        sameSite: 'strict',
+        sameSite: 'none',
         path: '/',
       });
       throw new UnauthorizedException();
@@ -304,7 +304,7 @@ export class AuthController {
       res.cookie('refresh_token', tokens.refreshToken, {
         httpOnly: true,
         secure: process.env.NODE_ENV === 'production',
-        sameSite: 'strict',
+        sameSite: 'none',
         path: '/',
         maxAge: 7 * 24 * 60 * 60 * 1000,
       });
@@ -315,7 +315,7 @@ export class AuthController {
       res.clearCookie('refresh_token', {
         httpOnly: true,
         secure: process.env.NODE_ENV === 'production',
-        sameSite: 'strict',
+        sameSite: 'none',
         path: '/',
       });
       throw new UnauthorizedException('Session invalid or expired');
@@ -333,7 +333,7 @@ export class AuthController {
     res.clearCookie('refresh_token', {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
-      sameSite: 'strict',
+      sameSite: 'none',
       path: '/',
     });
 
@@ -368,7 +368,7 @@ export class AuthController {
     res.cookie('refresh_token', tokens.refreshToken, {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
-      sameSite: 'strict',
+      sameSite: 'none',
       path: '/',
       maxAge: 7 * 24 * 60 * 60 * 1000,
     });
@@ -376,7 +376,7 @@ export class AuthController {
     res.cookie('accessToken', tokens.accessToken, {
       httpOnly: false,
       secure: process.env.NODE_ENV === 'production',
-      sameSite: 'strict',
+      sameSite: 'none',
       maxAge: 30 * 1000,
     });
 
