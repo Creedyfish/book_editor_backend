@@ -32,10 +32,72 @@ export class AuthController {
     private readonly emailService: MailService,
   ) {}
 
+  private getCookieConfig(maxAge?: number) {
+    const isProduction = process.env.NODE_ENV === 'production';
+
+    return {
+      httpOnly: true,
+      secure: isProduction, // Only secure in production (HTTPS)
+      sameSite: isProduction ? ('none' as const) : ('lax' as const), // 'none' for cross-site in production
+      path: '/',
+      maxAge: maxAge || 7 * 24 * 60 * 60 * 1000, // 7 days default
+      // Don't set domain - let browser handle it automatically
+    };
+  }
+
+  private getNonHttpOnlyCookieConfig(maxAge?: number) {
+    const isProduction = process.env.NODE_ENV === 'production';
+
+    return {
+      httpOnly: false,
+      secure: isProduction,
+      sameSite: isProduction ? ('none' as const) : ('lax' as const),
+      path: '/',
+      maxAge: maxAge || 10 * 60 * 1000, // 10 minutes default
+    };
+  }
+
   // ─────────────────────────────────────────────
   // ▶ EMAIL/PASSWORD AUTH FLOW
   // ─────────────────────────────────────────────
 
+  // @Post('register')
+  // async register(
+  //   @Body() body: RegisterDto,
+  //   @Res({ passthrough: true }) res: Response,
+  // ) {
+  //   const verifyCloudfare = await this.authService.verifyTurnstileToken(
+  //     body.token,
+  //   );
+
+  //   if (!verifyCloudfare) throw new UnauthorizedException('Please try again');
+
+  //   const newUser = await this.authService.createUser(
+  //     body.email,
+  //     body.password,
+  //   );
+  //   const code = await this.authService.createEmailVerificationCode(newUser.id);
+
+  //   await this.emailService.sendCodeEmail(
+  //     newUser.email,
+  //     code,
+  //     'email-verification',
+  //   );
+
+  //   const emailToken = await this.emailService.generateEmailToken(
+  //     newUser.email,
+  //     'email-verification',
+  //   );
+
+  //   res.cookie('email_verification_token', emailToken, {
+  //     secure: process.env.NODE_ENV === 'production',
+  //     sameSite: 'none',
+  //     maxAge: 10 * 60 * 1000,
+  //     path: '/',
+  //   });
+
+  //   return { message: 'email token sent' };
+  // }
   @Post('register')
   async register(
     @Body() body: RegisterDto,
@@ -64,16 +126,46 @@ export class AuthController {
       'email-verification',
     );
 
-    res.cookie('email_verification_token', emailToken, {
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: 'none',
-      maxAge: 10 * 60 * 1000,
-      path: '/',
-    });
+    // Fixed email verification token cookie
+    res.cookie(
+      'email_verification_token',
+      emailToken,
+      this.getNonHttpOnlyCookieConfig(10 * 60 * 1000), // 10 minutes
+    );
 
     return { message: 'email token sent' };
   }
 
+  // @Post('login')
+  // @UseGuards(AuthGuard('local'))
+  // async login(
+  //   @Req()
+  //   req: Request & {
+  //     user: Pick<User, 'id' | 'email' | 'emailVerified' | 'username'>;
+  //   },
+  //   @Body() body: LoginDto,
+  //   @Res({ passthrough: true }) res: Response,
+  // ) {
+  //   if (!req.user.emailVerified)
+  //     throw new ForbiddenException('Please verify your email first');
+
+  //   const verifyCloudfare = await this.authService.verifyTurnstileToken(
+  //     body.token,
+  //   );
+  //   if (!verifyCloudfare) throw new UnauthorizedException('Please try again');
+
+  //   const tokens = await this.authService.login(req.user);
+
+  //   res.cookie('refresh_token', tokens.refreshToken, {
+  //     httpOnly: true,
+  //     secure: process.env.NODE_ENV === 'production',
+  //     sameSite: 'none',
+  //     path: '/',
+  //     maxAge: 7 * 24 * 60 * 60 * 1000,
+  //   });
+
+  //   return { accessToken: tokens.accessToken };
+  // }
   @Post('login')
   @UseGuards(AuthGuard('local'))
   async login(
@@ -94,13 +186,8 @@ export class AuthController {
 
     const tokens = await this.authService.login(req.user);
 
-    res.cookie('refresh_token', tokens.refreshToken, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: 'none',
-      path: '/',
-      maxAge: 7 * 24 * 60 * 60 * 1000,
-    });
+    // Set refresh token with proper cross-site configuration
+    res.cookie('refresh_token', tokens.refreshToken, this.getCookieConfig());
 
     return { accessToken: tokens.accessToken };
   }
@@ -127,6 +214,42 @@ export class AuthController {
     return { email: payload.email };
   }
 
+  // @Post('email-verification')
+  // async verifyEmailCode(
+  //   @Req() req: Request,
+  //   @Body() body: VerifyEmailCodeDto,
+  //   @Res({ passthrough: true }) res: Response,
+  // ) {
+  //   const token = req.cookies['email_verification_token'];
+  //   const payload = await this.emailService.verifyTokenAndGetPayload(
+  //     token,
+  //     'email-verification',
+  //   );
+
+  //   if (!payload) throw new UnauthorizedException();
+
+  //   const verifiedUser = await this.authService.verifyUserEmailCode(
+  //     body.code,
+  //     payload.email,
+  //   );
+  //   const tokens = await this.authService.login({
+  //     id: verifiedUser.id,
+  //     email: verifiedUser.email,
+  //     username: verifiedUser.username,
+  //   });
+
+  //   res.cookie('refresh_token', tokens.refreshToken, {
+  //     httpOnly: true,
+  //     secure: process.env.NODE_ENV === 'production',
+  //     sameSite: 'none',
+  //     path: '/',
+  //     maxAge: 7 * 24 * 60 * 60 * 1000,
+  //   });
+
+  //   res.clearCookie('email_verification_token');
+
+  //   return { accessToken: tokens.accessToken };
+  // }
   @Post('email-verification')
   async verifyEmailCode(
     @Req() req: Request,
@@ -151,15 +274,18 @@ export class AuthController {
       username: verifiedUser.username,
     });
 
-    res.cookie('refresh_token', tokens.refreshToken, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: 'none',
-      path: '/',
-      maxAge: 7 * 24 * 60 * 60 * 1000,
-    });
+    // Set refresh token and clear email verification token
+    res.cookie('refresh_token', tokens.refreshToken, this.getCookieConfig());
 
-    res.clearCookie('email_verification_token');
+    // Clear email verification token with same config it was set with
+    res.clearCookie('email_verification_token', {
+      path: '/',
+      secure: process.env.NODE_ENV === 'production',
+      sameSite:
+        process.env.NODE_ENV === 'production'
+          ? ('none' as const)
+          : ('lax' as const),
+    });
 
     return { accessToken: tokens.accessToken };
   }
@@ -281,6 +407,46 @@ export class AuthController {
   // ▶ TOKEN MANAGEMENT
   // ─────────────────────────────────────────────
 
+  // @Post('refresh')
+  // async refreshToken(
+  //   @Req() req: Request,
+  //   @Res({ passthrough: true }) res: Response,
+  // ) {
+  //   const refreshToken = req.cookies?.['refresh_token'];
+
+  //   if (!refreshToken) {
+  //     res.clearCookie('refresh_token', {
+  //       httpOnly: true,
+  //       secure: process.env.NODE_ENV === 'production',
+  //       sameSite: 'none',
+  //       path: '/',
+  //     });
+  //     throw new UnauthorizedException();
+  //   }
+
+  //   try {
+  //     const tokens = await this.authService.refreshTokens(refreshToken);
+
+  //     res.cookie('refresh_token', tokens.refreshToken, {
+  //       httpOnly: true,
+  //       secure: process.env.NODE_ENV === 'production',
+  //       sameSite: 'none',
+  //       path: '/',
+  //       maxAge: 7 * 24 * 60 * 60 * 1000,
+  //     });
+
+  //     return { accessToken: tokens.accessToken };
+  //   } catch (err) {
+  //     // 🧹 If refresh token is invalid or session is revoked — clear the cookie
+  //     res.clearCookie('refresh_token', {
+  //       httpOnly: true,
+  //       secure: process.env.NODE_ENV === 'production',
+  //       sameSite: 'none',
+  //       path: '/',
+  //     });
+  //     throw new UnauthorizedException('Session invalid or expired');
+  //   }
+  // }
   @Post('refresh')
   async refreshToken(
     @Req() req: Request,
@@ -289,10 +455,14 @@ export class AuthController {
     const refreshToken = req.cookies?.['refresh_token'];
 
     if (!refreshToken) {
+      // Clear cookie with same settings used to set it
       res.clearCookie('refresh_token', {
         httpOnly: true,
         secure: process.env.NODE_ENV === 'production',
-        sameSite: 'none',
+        sameSite:
+          process.env.NODE_ENV === 'production'
+            ? ('none' as const)
+            : ('lax' as const),
         path: '/',
       });
       throw new UnauthorizedException();
@@ -301,27 +471,41 @@ export class AuthController {
     try {
       const tokens = await this.authService.refreshTokens(refreshToken);
 
-      res.cookie('refresh_token', tokens.refreshToken, {
-        httpOnly: true,
-        secure: process.env.NODE_ENV === 'production',
-        sameSite: 'none',
-        path: '/',
-        maxAge: 7 * 24 * 60 * 60 * 1000,
-      });
+      res.cookie('refresh_token', tokens.refreshToken, this.getCookieConfig());
 
       return { accessToken: tokens.accessToken };
     } catch (err) {
-      // 🧹 If refresh token is invalid or session is revoked — clear the cookie
+      // Clear the cookie on error
       res.clearCookie('refresh_token', {
         httpOnly: true,
         secure: process.env.NODE_ENV === 'production',
-        sameSite: 'none',
+        sameSite:
+          process.env.NODE_ENV === 'production'
+            ? ('none' as const)
+            : ('lax' as const),
         path: '/',
       });
       throw new UnauthorizedException('Session invalid or expired');
     }
   }
 
+  // @Post('logout')
+  // async logout(@Req() req: Request, @Res({ passthrough: true }) res: Response) {
+  //   const refreshToken = req.cookies['refresh_token'];
+  //   if (!refreshToken)
+  //     throw new UnauthorizedException('No refresh token found');
+
+  //   await this.authService.logout(refreshToken);
+
+  //   res.clearCookie('refresh_token', {
+  //     httpOnly: true,
+  //     secure: process.env.NODE_ENV === 'production',
+  //     sameSite: 'none',
+  //     path: '/',
+  //   });
+
+  //   return { message: 'Logged out successfully' };
+  // }
   @Post('logout')
   async logout(@Req() req: Request, @Res({ passthrough: true }) res: Response) {
     const refreshToken = req.cookies['refresh_token'];
@@ -333,7 +517,10 @@ export class AuthController {
     res.clearCookie('refresh_token', {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
-      sameSite: 'none',
+      sameSite:
+        process.env.NODE_ENV === 'production'
+          ? ('none' as const)
+          : ('lax' as const),
       path: '/',
     });
 
@@ -356,6 +543,32 @@ export class AuthController {
     // Redirect to Google
   }
 
+  // @Get('google/callback')
+  // @UseGuards(AuthGuard('google'))
+  // @UseFilters(OAuthExceptionFilter)
+  // async googleCallback(
+  //   @Req() req: Request & { user: Pick<User, 'id' | 'email' | 'username'> },
+  //   @Res({ passthrough: true }) res: Response,
+  // ) {
+  //   const tokens = await this.authService.login(req.user);
+
+  //   res.cookie('refresh_token', tokens.refreshToken, {
+  //     httpOnly: true,
+  //     secure: process.env.NODE_ENV === 'production',
+  //     sameSite: 'none',
+  //     path: '/',
+  //     maxAge: 7 * 24 * 60 * 60 * 1000,
+  //   });
+
+  //   res.cookie('accessToken', tokens.accessToken, {
+  //     httpOnly: false,
+  //     secure: process.env.NODE_ENV === 'production',
+  //     sameSite: 'none',
+  //     maxAge: 30 * 1000,
+  //   });
+
+  //   return res.redirect(`${process.env.REDIRECT_URL}/auth/google/success`);
+  // }
   @Get('google/callback')
   @UseGuards(AuthGuard('google'))
   @UseFilters(OAuthExceptionFilter)
@@ -365,19 +578,13 @@ export class AuthController {
   ) {
     const tokens = await this.authService.login(req.user);
 
-    res.cookie('refresh_token', tokens.refreshToken, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: 'none',
-      path: '/',
-      maxAge: 7 * 24 * 60 * 60 * 1000,
-    });
+    // Set refresh token with proper config
+    res.cookie('refresh_token', tokens.refreshToken, this.getCookieConfig());
 
-    res.cookie('accessToken', tokens.accessToken, {
-      httpOnly: false,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: 'none',
-      maxAge: 30 * 1000,
+    // Set a temporary access token that the frontend can read and store properly
+    res.cookie('temp_access_token', tokens.accessToken, {
+      ...this.getNonHttpOnlyCookieConfig(30 * 1000), // 30 seconds
+      httpOnly: false, // Allow frontend to read this one
     });
 
     return res.redirect(`${process.env.REDIRECT_URL}/auth/google/success`);
