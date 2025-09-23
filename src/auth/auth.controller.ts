@@ -69,6 +69,7 @@ export class AuthController {
       sameSite: 'none',
       maxAge: 10 * 60 * 1000,
       path: '/',
+      domain: '.ielbanbuena.online',
     });
 
     return { message: 'email token sent' };
@@ -99,6 +100,7 @@ export class AuthController {
       secure: process.env.NODE_ENV === 'production',
       sameSite: 'none',
       path: '/',
+      domain: '.ielbanbuena.online',
       maxAge: 7 * 24 * 60 * 60 * 1000,
     });
 
@@ -156,6 +158,7 @@ export class AuthController {
       secure: process.env.NODE_ENV === 'production',
       sameSite: 'none',
       path: '/',
+      domain: '.ielbanbuena.online',
       maxAge: 7 * 24 * 60 * 60 * 1000,
     });
 
@@ -199,6 +202,7 @@ export class AuthController {
       sameSite: 'none',
       maxAge: 10 * 60 * 1000,
       path: '/',
+      domain: '.ielbanbuena.online',
     });
 
     return { message: 'email token sent' };
@@ -222,6 +226,7 @@ export class AuthController {
       sameSite: 'none',
       maxAge: 10 * 60 * 1000,
       path: '/',
+      domain: '.ielbanbuena.online',
     });
 
     return { message: 'email token sent' };
@@ -251,6 +256,7 @@ export class AuthController {
       sameSite: 'none',
       maxAge: 10 * 60 * 1000,
       path: '/',
+      domain: '.ielbanbuena.online',
     });
 
     return this.authService.requestPasswordReset(body.email);
@@ -294,6 +300,7 @@ export class AuthController {
         secure: process.env.NODE_ENV === 'production',
         sameSite: 'none',
         path: '/',
+        domain: '.ielbanbuena.online',
       });
       throw new UnauthorizedException();
     }
@@ -306,6 +313,7 @@ export class AuthController {
         secure: process.env.NODE_ENV === 'production',
         sameSite: 'none',
         path: '/',
+        domain: '.ielbanbuena.online',
         maxAge: 7 * 24 * 60 * 60 * 1000,
       });
 
@@ -317,6 +325,7 @@ export class AuthController {
         secure: process.env.NODE_ENV === 'production',
         sameSite: 'none',
         path: '/',
+        domain: '.ielbanbuena.online',
       });
       throw new UnauthorizedException('Session invalid or expired');
     }
@@ -335,6 +344,7 @@ export class AuthController {
       secure: process.env.NODE_ENV === 'production',
       sameSite: 'none',
       path: '/',
+      domain: '.ielbanbuena.online',
     });
 
     return { message: 'Logged out successfully' };
@@ -370,6 +380,7 @@ export class AuthController {
       secure: process.env.NODE_ENV === 'production',
       sameSite: 'none',
       path: '/',
+      domain: '.ielbanbuena.online',
       maxAge: 7 * 24 * 60 * 60 * 1000,
     });
 
