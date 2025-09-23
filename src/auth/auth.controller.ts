@@ -69,7 +69,6 @@ export class AuthController {
       sameSite: 'none',
       maxAge: 10 * 60 * 1000,
       path: '/',
-      domain: '.ielbanbuena.online',
     });
 
     return { message: 'email token sent' };
@@ -202,7 +201,6 @@ export class AuthController {
       sameSite: 'none',
       maxAge: 10 * 60 * 1000,
       path: '/',
-      domain: '.ielbanbuena.online',
     });
 
     return { message: 'email token sent' };
@@ -226,7 +224,6 @@ export class AuthController {
       sameSite: 'none',
       maxAge: 10 * 60 * 1000,
       path: '/',
-      domain: '.ielbanbuena.online',
     });
 
     return { message: 'email token sent' };
@@ -256,7 +253,6 @@ export class AuthController {
       sameSite: 'none',
       maxAge: 10 * 60 * 1000,
       path: '/',
-      domain: '.ielbanbuena.online',
     });
 
     return this.authService.requestPasswordReset(body.email);
