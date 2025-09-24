@@ -421,165 +421,13 @@ export class AuthService {
     });
   }
 
-  // async refreshTokens(refreshToken: string) {
-  //   return this.databaseService.$transaction(async (tx) => {
-  //     try {
-  //       const payload = await this.jwtService.verifyAsync(refreshToken, {
-  //         secret: process.env.JWT_REFRESH_SECRET,
-  //       });
-
-  //       const hashedToken = createHash('sha256')
-  //         .update(refreshToken)
-  //         .digest('hex');
-
-  //       const session = await tx.session.findFirst({
-  //         where: {
-  //           userId: payload.sub,
-  //           refreshToken: hashedToken,
-  //           revoked: false,
-  //           expiresAt: {
-  //             gt: new Date(),
-  //           },
-  //         },
-  //         include: { user: true },
-  //       });
-
-  //       if (!session || !session.user) {
-  //         throw new ForbiddenException('Invalid or expired session');
-  //       }
-
-  //       // Revoke old session and create new one atomically
-  //       await tx.session.update({
-  //         where: { id: session.id },
-  //         data: { revoked: true },
-  //       });
-
-  //       const newTokens = await this.generateTokens(
-  //         session.user.id,
-  //         session.user.email,
-  //         session.user.username ?? undefined,
-  //       );
-
-  //       const newHashedToken = createHash('sha256')
-  //         .update(newTokens.refreshToken)
-  //         .digest('hex');
-  //       const expiresAt = new Date(Date.now() + 1000 * 60 * 60 * 24 * 5); // 5 days
-
-  //       await tx.session.create({
-  //         data: {
-  //           userId: session.user.id,
-  //           refreshToken: newHashedToken,
-  //           expiresAt,
-  //         },
-  //       });
-
-  //       return newTokens;
-  //     } catch (err) {
-  //       throw new UnauthorizedException('Access denied');
-  //     }
-  //   });
-  // }
-  // async refreshTokens(refreshToken: string) {
-  //   return this.databaseService.$transaction(async (tx) => {
-  //     try {
-  //       console.log('🔐 [1] Verifying refresh token...');
-  //       const payload = await this.jwtService.verifyAsync(refreshToken, {
-  //         secret: process.env.JWT_REFRESH_SECRET,
-  //       });
-  //       console.log('✅ [2] Token verified. User ID:', payload.sub);
-
-  //       const hashedToken = createHash('sha256')
-  //         .update(refreshToken)
-  //         .digest('hex');
-  //       console.log('🔁 [3] Hashed refresh token:', hashedToken);
-
-  //       console.log('🔍 [4] Looking for active session in DB...');
-  //       const session = await tx.session.findFirst({
-  //         where: {
-  //           userId: payload.sub,
-  //           refreshToken: hashedToken,
-  //           revoked: false,
-  //           expiresAt: {
-  //             gt: new Date(),
-  //           },
-  //         },
-  //         include: { user: true },
-  //       });
-
-  //       if (!session || !session.user) {
-  //         console.warn('⛔ [5] Invalid or expired session');
-  //         throw new ForbiddenException('Invalid or expired session');
-  //       }
-
-  //       console.log('✅ [6] Session found. ID:', session.id);
-
-  //       console.log('🛑 [7] Revoking old session...');
-  //       await tx.session.update({
-  //         where: { id: session.id },
-  //         data: { revoked: true },
-  //       });
-  //       console.log('🔁 [8] Old session revoked.');
-
-  //       console.log('🎟️ [9] Generating new tokens...');
-  //       const newTokens = await this.generateTokens(
-  //         session.user.id,
-  //         session.user.email,
-  //         session.user.username ?? undefined,
-  //       );
-  //       console.log('✅ [10] Tokens generated.');
-
-  //       const newHashedToken = createHash('sha256')
-  //         .update(newTokens.refreshToken)
-  //         .digest('hex');
-  //       const expiresAt = new Date(Date.now() + 1000 * 60 * 60 * 24 * 5);
-  //       console.log('🔐 [11] Hashed new refresh token.');
-
-  //       console.log('🗃️ [12] Storing new session...');
-  //       await tx.session.create({
-  //         data: {
-  //           userId: session.user.id,
-  //           refreshToken: newHashedToken,
-  //           revoked:false,
-  //           expiresAt,
-  //         },
-  //       });
-  //       console.log('✅ [13] New session stored. Returning tokens...');
-
-  //       return newTokens;
-  //     } catch (err) {
-  //       console.error('🚫 [ERR] Refresh token failed:', err.message);
-  //       throw new UnauthorizedException('Access denied');
-  //     }
-  //   });
-  // }
-
   async refreshTokens(refreshToken: string) {
-    console.log('🔄 Starting refresh token validation...');
-    console.log(
-      '🎫 Refresh token (first 50 chars):',
-      refreshToken.substring(0, 50) + '...',
-    );
-
     return this.databaseService.$transaction(async (tx) => {
       try {
         // Step 1: Verify JWT token
-        console.log('🔐 Verifying JWT token...');
-        console.log(
-          '🔑 Using JWT_REFRESH_SECRET:',
-          process.env.JWT_REFRESH_SECRET ? 'SET' : 'MISSING',
-        );
 
         const payload = await this.jwtService.verifyAsync(refreshToken, {
           secret: process.env.JWT_REFRESH_SECRET,
-        });
-
-        console.log('✅ JWT verification successful:', {
-          sub: payload.sub,
-          email: payload.email,
-          username: payload.username,
-          exp: payload.exp,
-          expiresAt: new Date(payload.exp * 1000).toISOString(),
-          isExpired: payload.exp < Math.floor(Date.now() / 1000),
         });
 
         // Step 2: Hash the token for database lookup
@@ -587,19 +435,7 @@ export class AuthService {
           .update(refreshToken)
           .digest('hex');
 
-        console.log(
-          '🔐 Hashed token (first 20 chars):',
-          hashedToken.substring(0, 20) + '...',
-        );
-
         // Step 3: Find session in database
-        console.log('🗄️ Looking up session in database...');
-        console.log('🔍 Search criteria:', {
-          userId: payload.sub,
-          hashedTokenPrefix: hashedToken.substring(0, 20) + '...',
-          revoked: false,
-          expiresAt: { gt: new Date() },
-        });
 
         const session = await tx.session.findFirst({
           where: {
@@ -613,61 +449,31 @@ export class AuthService {
           include: { user: true },
         });
 
-        console.log(
-          '🗄️ Session lookup result:',
-          session
-            ? {
-                id: session.id,
-                userId: session.userId,
-                revoked: session.revoked,
-                expiresAt: session.expiresAt,
-                hasUser: !!session.user,
-                userEmail: session.user?.email,
-                userVerified: session.user?.emailVerified,
-              }
-            : 'NO SESSION FOUND',
-        );
-
         // Step 4: Check if session and user exist
         if (!session || !session.user) {
-          console.log('❌ Session validation failed:', {
-            sessionExists: !!session,
-            userExists: !!session?.user,
-            reason: !session ? 'No session found' : 'No user in session',
-          });
           throw new ForbiddenException('Invalid or expired session');
         }
 
-        console.log('✅ Session validation successful');
-
         // Step 5: Revoke old session
-        console.log('🗑️ Revoking old session...');
+
         await tx.session.update({
           where: { id: session.id },
           data: { revoked: true },
         });
-        console.log('✅ Old session revoked');
 
         // Step 6: Generate new tokens
-        console.log('🎫 Generating new tokens...');
+
         const newTokens = await this.generateTokens(
           session.user.id,
           session.user.email,
           session.user.username ?? undefined,
         );
-        console.log('✅ New tokens generated');
 
         // Step 7: Create new session
         const newHashedToken = createHash('sha256')
           .update(newTokens.refreshToken)
           .digest('hex');
         const expiresAt = new Date(Date.now() + 1000 * 60 * 60 * 24 * 5); // 5 days
-
-        console.log('💾 Creating new session...', {
-          userId: session.user.id,
-          expiresAt: expiresAt.toISOString(),
-          hashedTokenPrefix: newHashedToken.substring(0, 20) + '...',
-        });
 
         await tx.session.create({
           data: {
@@ -676,9 +482,6 @@ export class AuthService {
             expiresAt,
           },
         });
-
-        console.log('✅ New session created successfully');
-        console.log('🎉 Refresh token flow completed successfully');
 
         return newTokens;
       } catch (err) {

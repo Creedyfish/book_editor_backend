@@ -54,7 +54,6 @@ export class S3Service {
 
     try {
       await this.s3Client.send(command);
-      console.log(`[S3] Deleted object: ${key}`);
     } catch (error) {
       console.error(`[S3] Failed to delete object: ${key}`, error);
       throw error; // rethrow so the caller can handle or report
@@ -72,7 +71,6 @@ export class S3Service {
       const listedObjects = await this.s3Client.send(listCommand);
 
       if (!listedObjects.Contents || listedObjects.Contents.length === 0) {
-        console.log(`[S3] No objects found under prefix: ${prefix}`);
         return;
       }
 
@@ -84,7 +82,6 @@ export class S3Service {
       });
 
       await this.s3Client.send(deleteCommand);
-      console.log(`[S3] Deleted all objects under: ${prefix}`);
     } catch (error) {
       console.error(`[S3] Failed to delete folder: ${prefix}`, error);
       throw error;
@@ -119,7 +116,6 @@ export class S3Service {
 
       const contents = listResponse.Contents ?? [];
       if (contents.length === 0) {
-        console.log(`No files found under ${oldPrefix}`);
         return;
       }
 
@@ -143,8 +139,6 @@ export class S3Service {
             Key: oldKey,
           }),
         );
-
-        console.log(`Renamed S3 object: ${oldKey} → ${newKey}`);
       }
     } catch (error) {
       console.error(`Error during S3 rename: ${error}`);
