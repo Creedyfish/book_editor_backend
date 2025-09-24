@@ -93,6 +93,7 @@ export class AuthController {
     if (!verifyCloudfare) throw new UnauthorizedException('Please try again');
 
     const tokens = await this.authService.login(req.user);
+    res.clearCookie('refresh_token', { path: '/' });
 
     res.cookie('refresh_token', tokens.refreshToken, {
       httpOnly: true,
@@ -151,6 +152,7 @@ export class AuthController {
       email: verifiedUser.email,
       username: verifiedUser.username,
     });
+    res.clearCookie('refresh_token', { path: '/' });
 
     res.cookie('refresh_token', tokens.refreshToken, {
       httpOnly: true,
@@ -374,6 +376,7 @@ export class AuthController {
       return { accessToken: tokens.accessToken };
     } catch (err) {
       console.log('❌ Refresh token validation failed:', err.message);
+      res.clearCookie('refresh_token', { path: '/' });
       res.clearCookie('refresh_token', {
         httpOnly: true,
         secure: process.env.NODE_ENV === 'production',
