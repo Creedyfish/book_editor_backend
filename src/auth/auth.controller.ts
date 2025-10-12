@@ -69,6 +69,7 @@ export class AuthController {
       sameSite: 'none',
       maxAge: 10 * 60 * 1000,
       path: '/',
+      domain: '.ielbanbuena.online',
     });
 
     return { message: 'email token sent' };
@@ -203,6 +204,7 @@ export class AuthController {
       sameSite: 'none',
       maxAge: 10 * 60 * 1000,
       path: '/',
+      domain: '.ielbanbuena.online',
     });
 
     return { message: 'email token sent' };
@@ -226,6 +228,7 @@ export class AuthController {
       sameSite: 'none',
       maxAge: 10 * 60 * 1000,
       path: '/',
+      domain: '.ielbanbuena.online',
     });
 
     return { message: 'email token sent' };
@@ -255,6 +258,7 @@ export class AuthController {
       sameSite: 'none',
       maxAge: 10 * 60 * 1000,
       path: '/',
+      domain: '.ielbanbuena.online',
     });
 
     return this.authService.requestPasswordReset(body.email);
@@ -334,11 +338,9 @@ export class AuthController {
     @Req() req: Request,
     @Res({ passthrough: true }) res: Response,
   ) {
-    
     const refreshToken = req.cookies?.['refresh_token'];
 
     if (!refreshToken) {
-     
       res.clearCookie('refresh_token', {
         httpOnly: true,
         secure: process.env.NODE_ENV === 'production',
@@ -350,7 +352,6 @@ export class AuthController {
     }
 
     try {
-     
       const tokens = await this.authService.refreshTokens(refreshToken);
 
       const cookieOptions = {
@@ -362,12 +363,10 @@ export class AuthController {
         maxAge: 7 * 24 * 60 * 60 * 1000,
       };
 
-    
       res.cookie('refresh_token', tokens.refreshToken, cookieOptions);
 
       return { accessToken: tokens.accessToken };
     } catch (err) {
-   
       res.clearCookie('refresh_token', { path: '/' });
       res.clearCookie('refresh_token', {
         httpOnly: true,
