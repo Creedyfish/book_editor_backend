@@ -30,6 +30,14 @@ async function bootstrap() {
     await app.listen(port);
   }
 
+  const shutdown = async () => {
+    await app.close(); // closes HTTP server, drains connections
+    process.exit(0);
+  };
+
+  process.on('SIGINT', shutdown);
+  process.on('SIGTERM', shutdown);
+
   console.log(`Application is running on port ${port}`);
 }
 

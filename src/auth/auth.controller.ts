@@ -334,19 +334,11 @@ export class AuthController {
     @Req() req: Request,
     @Res({ passthrough: true }) res: Response,
   ) {
-    console.log('🍪 All cookies:', req.cookies);
-    console.log('🔄 Refresh token cookie:', req.cookies?.['refresh_token']);
-    console.log('🌐 Request headers:', {
-      origin: req.headers.origin,
-      referer: req.headers.referer,
-      'user-agent': req.headers['user-agent'],
-      cookie: req.headers.cookie,
-    });
-
+    
     const refreshToken = req.cookies?.['refresh_token'];
 
     if (!refreshToken) {
-      console.log('❌ No refresh token found in cookies');
+     
       res.clearCookie('refresh_token', {
         httpOnly: true,
         secure: process.env.NODE_ENV === 'production',
@@ -358,7 +350,7 @@ export class AuthController {
     }
 
     try {
-      console.log('✅ Found refresh token, attempting to refresh...');
+     
       const tokens = await this.authService.refreshTokens(refreshToken);
 
       const cookieOptions = {
@@ -370,12 +362,12 @@ export class AuthController {
         maxAge: 7 * 24 * 60 * 60 * 1000,
       };
 
-      console.log('🍪 Setting new refresh token with options:', cookieOptions);
+    
       res.cookie('refresh_token', tokens.refreshToken, cookieOptions);
 
       return { accessToken: tokens.accessToken };
     } catch (err) {
-      console.log('❌ Refresh token validation failed:', err.message);
+   
       res.clearCookie('refresh_token', { path: '/' });
       res.clearCookie('refresh_token', {
         httpOnly: true,
