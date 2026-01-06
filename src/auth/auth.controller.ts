@@ -24,6 +24,7 @@ import { VerifyEmailCodeDto } from './dto/email/verify-email-code.dto';
 import { ResendVerificationDto } from './dto/email/resend-verification.dto';
 import { RequestPasswordResetDto } from './dto/password/request-password-reset.dto';
 import { ResetPasswordDto } from './dto/password/reset-password.dto';
+import { setCookie, clearCookie } from '../utils/cookie.helper';
 
 @Controller('auth')
 export class AuthController {
@@ -64,12 +65,8 @@ export class AuthController {
       'email-verification',
     );
 
-    res.cookie('email_verification_token', emailToken, {
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: 'none',
+    setCookie(res, 'email_verification_token', emailToken, {
       maxAge: 10 * 60 * 1000,
-      path: '/',
-      domain: '.ielbanbuena.online',
     });
 
     return { message: 'email token sent' };
@@ -94,14 +91,10 @@ export class AuthController {
     if (!verifyCloudfare) throw new UnauthorizedException('Please try again');
 
     const tokens = await this.authService.login(req.user);
-    res.clearCookie('refresh_token', { path: '/' });
+    clearCookie(res, 'refresh_token');
 
-    res.cookie('refresh_token', tokens.refreshToken, {
+    setCookie(res, 'refresh_token', tokens.refreshToken, {
       httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: 'none',
-      path: '/',
-      domain: '.ielbanbuena.online',
       maxAge: 7 * 24 * 60 * 60 * 1000,
     });
 
@@ -153,18 +146,14 @@ export class AuthController {
       email: verifiedUser.email,
       username: verifiedUser.username,
     });
-    res.clearCookie('refresh_token', { path: '/' });
 
-    res.cookie('refresh_token', tokens.refreshToken, {
+    clearCookie(res, 'refresh_token');
+    clearCookie(res, 'email_verification_token');
+
+    setCookie(res, 'refresh_token', tokens.refreshToken, {
       httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: 'none',
-      path: '/',
-      domain: '.ielbanbuena.online',
       maxAge: 7 * 24 * 60 * 60 * 1000,
     });
-
-    res.clearCookie('email_verification_token');
 
     return { accessToken: tokens.accessToken };
   }
@@ -199,12 +188,8 @@ export class AuthController {
       'email-verification',
     );
 
-    res.cookie('email_verification_token', emailToken, {
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: 'none',
+    setCookie(res, 'email_verification_token', emailToken, {
       maxAge: 10 * 60 * 1000,
-      path: '/',
-      domain: '.ielbanbuena.online',
     });
 
     return { message: 'email token sent' };
@@ -223,12 +208,8 @@ export class AuthController {
       'email-verification',
     );
 
-    res.cookie('email_verification_token', emailToken, {
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: 'none',
+    setCookie(res, 'email_verification_token', emailToken, {
       maxAge: 10 * 60 * 1000,
-      path: '/',
-      domain: '.ielbanbuena.online',
     });
 
     return { message: 'email token sent' };
@@ -253,12 +234,9 @@ export class AuthController {
       'password-reset',
     );
 
-    res.cookie('reset_password_token', emailToken, {
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: 'none',
+    setCookie(res, 'reset_password_token', emailToken, {
+      httpOnly: true,
       maxAge: 10 * 60 * 1000,
-      path: '/',
-      domain: '.ielbanbuena.online',
     });
 
     return this.authService.requestPasswordReset(body.email);
@@ -277,7 +255,9 @@ export class AuthController {
     );
 
     if (!payload) throw new UnauthorizedException();
-    res.clearCookie('reset_password_token');
+
+    clearCookie(res, 'reset_password_token');
+
     return this.authService.passwordReset(
       body.code,
       body.password,
@@ -289,50 +269,6 @@ export class AuthController {
   // ▶ TOKEN MANAGEMENT
   // ─────────────────────────────────────────────
 
-  // @Post('refresh')
-  // async refreshToken(
-  //   @Req() req: Request,
-  //   @Res({ passthrough: true }) res: Response,
-  // ) {
-  //   const refreshToken = req.cookies?.['refresh_token'];
-
-  //   if (!refreshToken) {
-  //     res.clearCookie('refresh_token', {
-  //       httpOnly: true,
-  //       secure: process.env.NODE_ENV === 'production',
-  //       sameSite: 'none',
-  //       path: '/',
-  //       domain: '.ielbanbuena.online',
-  //     });
-  //     throw new UnauthorizedException();
-  //   }
-
-  //   try {
-  //     const tokens = await this.authService.refreshTokens(refreshToken);
-
-  //     res.cookie('refresh_token', tokens.refreshToken, {
-  //       httpOnly: true,
-  //       secure: process.env.NODE_ENV === 'production',
-  //       sameSite: 'none',
-  //       path: '/',
-  //       domain: '.ielbanbuena.online',
-  //       maxAge: 7 * 24 * 60 * 60 * 1000,
-  //     });
-
-  //     return { accessToken: tokens.accessToken };
-  //   } catch (err) {
-  //     // 🧹 If refresh token is invalid or session is revoked — clear the cookie
-  //     res.clearCookie('refresh_token', {
-  //       httpOnly: true,
-  //       secure: process.env.NODE_ENV === 'production',
-  //       sameSite: 'none',
-  //       path: '/',
-  //       domain: '.ielbanbuena.online',
-  //     });
-  //     throw new UnauthorizedException('Session invalid or expired');
-  //   }
-  // }
-  // 1. First, let's add debugging to your refresh endpoint in AuthController
   @Post('refresh')
   async refreshToken(
     @Req() req: Request,
@@ -341,40 +277,21 @@ export class AuthController {
     const refreshToken = req.cookies?.['refresh_token'];
 
     if (!refreshToken) {
-      res.clearCookie('refresh_token', {
-        httpOnly: true,
-        secure: process.env.NODE_ENV === 'production',
-        sameSite: 'none',
-        path: '/',
-        domain: '.ielbanbuena.online',
-      });
+      clearCookie(res, 'refresh_token');
       throw new UnauthorizedException('No refresh token found');
     }
 
     try {
       const tokens = await this.authService.refreshTokens(refreshToken);
 
-      const cookieOptions = {
+      setCookie(res, 'refresh_token', tokens.refreshToken, {
         httpOnly: true,
-        secure: process.env.NODE_ENV === 'production',
-        sameSite: 'none' as const,
-        path: '/',
-        domain: '.ielbanbuena.online',
         maxAge: 7 * 24 * 60 * 60 * 1000,
-      };
-
-      res.cookie('refresh_token', tokens.refreshToken, cookieOptions);
+      });
 
       return { accessToken: tokens.accessToken };
     } catch (err) {
-      res.clearCookie('refresh_token', { path: '/' });
-      res.clearCookie('refresh_token', {
-        httpOnly: true,
-        secure: process.env.NODE_ENV === 'production',
-        sameSite: 'none',
-        path: '/',
-        domain: '.ielbanbuena.online',
-      });
+      clearCookie(res, 'refresh_token');
       throw new UnauthorizedException('Session invalid or expired');
     }
   }
@@ -387,13 +304,7 @@ export class AuthController {
 
     await this.authService.logout(refreshToken);
 
-    res.clearCookie('refresh_token', {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: 'none',
-      path: '/',
-      domain: '.ielbanbuena.online',
-    });
+    clearCookie(res, 'refresh_token');
 
     return { message: 'Logged out successfully' };
   }
@@ -423,19 +334,13 @@ export class AuthController {
   ) {
     const tokens = await this.authService.login(req.user);
 
-    res.cookie('refresh_token', tokens.refreshToken, {
+    setCookie(res, 'refresh_token', tokens.refreshToken, {
       httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: 'none',
-      path: '/',
-      domain: '.ielbanbuena.online',
       maxAge: 7 * 24 * 60 * 60 * 1000,
     });
 
-    res.cookie('accessToken', tokens.accessToken, {
+    setCookie(res, 'accessToken', tokens.accessToken, {
       httpOnly: false,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: 'none',
       maxAge: 30 * 1000,
     });
 
